@@ -11,6 +11,27 @@ impl<A> Production<A> where A: Clone + Copy + PartialEq + Display {
     }
 }
 
+pub fn rewrite_in_place<A: Clone + Copy + PartialEq + Display>(rules: &[Production<A>], axiom: &mut Vec<A>) {
+    let mut size = axiom.len() as i32;
+
+    let mut pointer = 0;
+    'token: while (pointer as i32) < size {
+        for rule in rules.iter() {
+            if let Some(token_length) = matcher(rule, &axiom[pointer..]) {
+                axiom.drain(pointer..(pointer + token_length));
+                rule.transcriber.iter().rev().for_each(|token| axiom.insert(pointer, *token));
+
+                pointer += rule.transcriber.len();
+                size += rule.transcriber.len() as i32 - token_length as i32;
+                
+                continue 'token;
+            }
+        }
+
+        pointer += 1;
+    }
+}
+
 pub fn rewrite<A: Clone + Copy + PartialEq + Display>(rules: &[Production<A>], mut axiom: Vec<A>) -> Vec<A> {
     let mut output: Vec<A> = Vec::new();
 

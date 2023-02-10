@@ -4,7 +4,8 @@ use std::{
 };
 
 use lindenmayer_system_framework::{
-    production, 
+    Axiom, 
+    rules,
     rewrite_in_place
 };
 
@@ -32,7 +33,7 @@ impl Display for FractalTreeAlphabet {
 
 const BASE_SEG_LENGTH: f64 = 300.;
 
-fn draw_fractal_tree(axiom: &[FractalTreeAlphabet], depth: i32) {
+fn draw_fractal_tree(axiom: Axiom<FractalTreeAlphabet>, depth: i32) {
     use FractalTreeAlphabet::*;
 
     let mut turtle = Turtle::new();
@@ -47,7 +48,7 @@ fn draw_fractal_tree(axiom: &[FractalTreeAlphabet], depth: i32) {
     let seg_length = BASE_SEG_LENGTH / 2f64.powi(depth);
 
     // draw the tree
-    for token in axiom.iter() {
+    for token in axiom {
         match token {
             Leaf => { 
                 turtle.forward(seg_length);
@@ -67,20 +68,18 @@ fn draw_fractal_tree(axiom: &[FractalTreeAlphabet], depth: i32) {
     }
 }
 
+const DEPTH: i32 = 6;
+
 fn main() {
     use FractalTreeAlphabet::*;
-    let mut axiom = vec![Leaf];
+    let mut axiom = Axiom::from(Leaf);
 
-    let rules = vec![
-        production!(Node => Node : Node),
-        production!(Leaf => Node : Left : Leaf : Right : Leaf)
-    ];
+    let rules = rules!(
+        Node => Node : Node, 
+        Leaf => Node : Left : Leaf : Right : Leaf
+    );
 
-    let depth = 6;
+    for _n in 0..DEPTH { rewrite_in_place(&rules, &mut axiom); }
 
-    for _ in 0..depth {
-        rewrite_in_place(&rules, &mut axiom);
-    }
-
-    draw_fractal_tree(&axiom, depth);
+    draw_fractal_tree(axiom, DEPTH);
 }

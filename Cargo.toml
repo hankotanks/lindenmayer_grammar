@@ -1,0 +1,17 @@
+[package]
+name = "lindenmayer_system_framework"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dev-dependencies]
+turtle = {git = "https://github.com/sunjay/turtle"}
+
+[lib]
+name = "lindenmayer_system_framework"
+path = "src/lib.rs"
+
+[[example]]
+name = "fractal_tree"
+path = "examples/fractal_tree.rs"

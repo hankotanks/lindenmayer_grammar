@@ -1,7 +1,4 @@
-use std::{
-    fmt::Display, 
-    collections::VecDeque
-};
+use std::collections::VecDeque;
 
 use lindenmayer_system_framework::{
     Axiom, 
@@ -14,26 +11,12 @@ use turtle::{
     Speed
 };
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum FractalTreeAlphabet { Leaf, Node, Left, Right }
-
-impl Display for FractalTreeAlphabet {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use FractalTreeAlphabet::*;
-        write!(f, "{}",
-            match self {
-                Leaf => '0',
-                Node => '1',
-                Left => '[',
-                Right => ']',
-            }
-        )
-    }
-}
 
 const BASE_SEG_LENGTH: f64 = 300.;
 
-fn draw_fractal_tree(axiom: Axiom<FractalTreeAlphabet>, depth: i32) {
+fn draw_fractal_tree(axiom: &Axiom<FractalTreeAlphabet>, depth: i32) {
     use FractalTreeAlphabet::*;
 
     let mut turtle = Turtle::new();
@@ -61,14 +44,16 @@ fn draw_fractal_tree(axiom: Axiom<FractalTreeAlphabet>, depth: i32) {
             },
             Right => {
                 turtle.pen_up();
-                turtle_state.pop_front().map(|(pos, angle)| (turtle.go_to(pos), turtle.set_heading(angle - 45.)));
+                turtle_state.pop_front().map(|(pos, angle)| { 
+                    (turtle.go_to(pos), turtle.set_heading(angle - 45.)) 
+                } );
                 turtle.pen_down();
             },
         }
     }
 }
 
-const DEPTH: i32 = 6;
+const DEPTH: i32 = 3;
 
 fn main() {
     use FractalTreeAlphabet::*;
@@ -81,5 +66,5 @@ fn main() {
 
     for _n in 0..DEPTH { rewrite_in_place(&rules, &mut axiom); }
 
-    draw_fractal_tree(axiom, DEPTH);
+    draw_fractal_tree(&axiom, DEPTH);
 }

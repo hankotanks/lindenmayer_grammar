@@ -14,4 +14,8 @@ path = "src/lib.rs"
 
 [[example]]
 name = "fractal_tree"
-path = "examples/fractal_tree.rs"
+path = "examples/fractal_tree/main.rs"
+
+[[example]]
+name = "cantor_set"
+path = "examples/cantor_set/main.rs"

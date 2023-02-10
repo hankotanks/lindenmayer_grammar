@@ -10,6 +10,12 @@ impl<T> Alphabet for T where T: Clone + Copy + PartialEq + Debug {  }
 #[derive(Clone, PartialEq, Eq)]
 pub struct Axiom<A>(Vec<A>, Cell<usize>) where A: Alphabet;
 
+impl<A> Axiom<A> where A: Alphabet {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
 impl<A> From<A> for Axiom<A> where A: Alphabet {
     fn from(token: A) -> Self {
         Self(vec![token], Cell::new(0))

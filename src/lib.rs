@@ -11,7 +11,7 @@ impl<T> Alphabet for T where T: Clone + Copy + PartialEq + Debug {  }
 pub struct Axiom<A>(Vec<A>, Cell<usize>) where A: Alphabet;
 
 impl<A> Axiom<A> where A: Alphabet {
-    pub fn len(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.0.len()
     }
 }

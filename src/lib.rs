@@ -55,10 +55,10 @@ pub trait Alphabet: Clone + Copy + PartialEq + Debug {  }
 
 impl<T> Alphabet for T where T: Clone + Copy + PartialEq + Debug {  }
 
-/// A sentence of symbols from a single `Alphabet`.
+/// A sentence of symbols from a single [Alphabet].
 /// 
 /// An axiom can be initialized from a single symbol or a collection of symbols.
-/// When provided a `Ruleset`, an Axiom can be rewritten, either with the creation of a new Axiom (through the associated `step` method) or mutably (with `rewrite`).
+/// When provided a [Ruleset], an Axiom can be rewritten, either with the creation of a new Axiom (through the associated [step](#method:step) method) or mutably with [rewrite](#method:rewrite).
 /// 
 /// The collection of symbols that underpin an Axiom cannot be accessed, although Axioms themselves are iterators. 
 /// Iteration is reset upon exhaustion, allowing it to be easily reused.
@@ -75,11 +75,11 @@ impl<T> Alphabet for T where T: Clone + Copy + PartialEq + Debug {  }
 /// 
 /// for _ in 0..3 {
 ///     // Rewrite the axiom using Lindenmayer's algae model
-///     axiom.rewrite(rules!(0 => 0 : 1, 1 => 0));
+///     axiom.rewrite(&rules!(0 => 0 : 1, 1 => 0));
 /// }
 /// 
 /// // We can iterate through the axiom, printing each element...
-/// for symbol in axiom { print!("{:?}, ", symbol); }
+/// for symbol in &axiom { print!("{:?}, ", symbol); }
 /// 
 /// // The iterator can still be collected
 /// let elements = axiom.collect::<Vec<_>>();
@@ -155,12 +155,12 @@ fn matcher<A: Alphabet>(rule: &Production<A>, slice: &[A]) -> Option<usize> {
 }
 
 impl<A> Axiom<A> where A: Alphabet {
-    /// Produces a new Axiom from the provided `Ruleset`.
+    /// Produces a new Axiom from the provided [Ruleset].
     /// 
     /// Can be used when the initial axiom shouldn't be consumed.
     /// For example, if we want to accumulate all generations of an L-system.
     /// 
-    /// Axioms can be rewritten in place using their associated `rewrite` method.
+    /// Axioms can be rewritten in place using their associated [rewrite](#method:rewrite) method.
     /// 
     /// # Examples
     /// 
@@ -197,9 +197,11 @@ impl<A> Axiom<A> where A: Alphabet {
         output.into()
     }
 
-    /// Rewrites the axiom using the given `Ruleset`
+    /// Rewrites the [Axiom] using the given [Ruleset]
     /// 
-    /// Should be used to quickly step through all generations of an L-system to a desired point.
+    /// Can be used to quickly step through all generations of an L-system to a desired point.
+    /// 
+    /// The associated method [step](#method:step) produces a new [Axiom] from the original.
     /// 
     /// # Examples
     /// 
@@ -238,7 +240,7 @@ impl<A> Axiom<A> where A: Alphabet {
         }
     }
 
-    /// Returns the length of the current Axiom
+    /// Returns the length of the current [Axiom]
     /// 
     /// # Examples
     /// 
@@ -254,14 +256,14 @@ impl<A> Axiom<A> where A: Alphabet {
 
 /// A rule that dictates how symbols are rewritten in an L-System.
 /// 
-/// Each `Production` consists of two axioms
+/// Each [Production] consists of two axioms
 /// - the matcher
 /// - the transcriber
 /// 
-/// When the matcher is found in a given `Axiom`, it is replaced with the transcriber.
-/// Productions are most easily defined using the `production!` macro.
+/// When the matcher is found in a given [Axiom], it is replaced with the transcriber.
+/// Productions are most easily defined using the [production!] macro.
 /// 
-/// Productions cannot be applied to axioms on their own, they must be compiled into a `Ruleset` first.
+/// Productions cannot be applied to axioms on their own, they must be compiled into a [Ruleset] first.
 /// 
 /// # Examples
 /// 
@@ -287,14 +289,14 @@ pub struct Production<A: Alphabet> {
 }
 
 impl<A> Production<A> where A: Alphabet {
-    /// Creates a new Production from two Axioms
+    /// Creates a new [Production] from two Axioms
     /// 
-    /// Consider using the more concise `production!` macro syntax.
+    /// Consider using the more concise [production!] macro syntax instead.
     /// 
     /// # Examples
     /// 
     /// ```
-    /// use lsys_grammar::{Production, production};
+    /// use lsys_grammar::{Axiom, Production, production};
     /// 
     /// // Create two identical productions. The former uses the struct definition, the second uses a macro
     /// let p1 = Production::new(Axiom::from(0), Axiom::from(vec![0, 1]));
@@ -320,9 +322,10 @@ impl<A> Debug for Production<A> where A: Alphabet {
     }
 }
 
-/// An ordered collection of `Production` rules.
+/// An ordered collection of [Production] rules.
 /// 
-/// Can be created from a single production, a collection of productions, or through the `rules!` macro.
+/// Can be created from a single production, a collection of productions, or through the [rules!] macro.
+/// 
 /// Identity productions are implicit, and do not need to be added to the Ruleset.
 /// 
 /// # Examples
@@ -366,18 +369,19 @@ impl<A> Debug for Ruleset<A> where A: Alphabet {
     }
 }
 
-#[doc = "Builds a rulest from a comma-separated list of `Production` statements."]
-#[doc = ""]
-#[doc = "Matcher and transcriber `Axioms` should be separated by a `=>` symbol."]
-#[doc = "The elements of the two components should be separated with a colon."]
-#[doc = ""]
-#[doc = "# Examples"]
-#[doc = ""]
-#[doc = "```"]
-#[doc = "use lsys_grammar::rules;"]
-#[doc = ""]
-#[doc = "rules!(0 => 0 : 1, 1 => 0;"]
-#[doc = "```"]
+/// Builds a [Ruleset] from a comma-separated list of [Production] statements.
+/// 
+/// Matcher and transcriber axioms should be separated by a `=>` symbol.
+/// 
+/// The elements of the two components should be separated with a colon.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use lsys_grammar::rules;
+///
+/// rules!(0 => 0 : 1, 1 => 0);
+/// ```
 #[macro_export]
 macro_rules! rules {
     ($($a:literal $(: $b:literal)* => $c:literal $(: $d:literal)*),+) => {
@@ -402,21 +406,22 @@ macro_rules! rules {
     };
 }
 
-#[doc = "A wrapper to create a single `Production`."]
-#[doc = ""]
-#[doc = "Matcher and transcriber `Axioms` should be separated by a `=>` symbol."]
-#[doc = "The elements of the two components should be separated with a colon."]
-#[doc = ""]
-#[doc = "# Examples"]
-#[doc = ""]
-#[doc = "```"]
-#[doc = "use lsys_grammar::{Production, production};"]
-#[doc = ""]
-#[doc = "production!(0 => 0 : 1);"]
-#[doc = ""]
-#[doc = "// This is equivalent to..."]
-#[doc = "Production::new(Axiom::from(0), Axiom::from(vec![0, 1]));"]
-#[doc = "```"]
+/// A wrapper to create a single [Production].
+/// 
+/// Matcher and transcriber axioms should be separated by a `=>` symbol.
+/// 
+/// The elements of the two components should be separated with a colon.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use lsys_grammar::{Axiom, Production, production};
+/// 
+/// production!(0 => 0 : 1);
+/// 
+/// // This is equivalent to...
+/// Production::new(Axiom::from(0), Axiom::from(vec![0, 1]));
+/// ```
 #[macro_export]
 macro_rules! production {
     ($a:literal $(: $b:literal)*) => {

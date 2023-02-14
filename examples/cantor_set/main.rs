@@ -1,7 +1,6 @@
-use lindenmayer_system_framework::{
+use lsys_grammar::{
     rules, 
-    Axiom, 
-    rewrite
+    Axiom,
 };
 
 use turtle::Drawing;
@@ -61,9 +60,7 @@ fn main() {
         B => B : B : B
     );
 
-    for _n in 0..DEPTH {
-        axioms.push(rewrite(&rules, axioms.last().unwrap().clone()));
-    }
+    for _n in 0..DEPTH { axioms.push(axioms.last().unwrap().step(&rules)); }
 
     draw_cantor_set(&axioms);
 }

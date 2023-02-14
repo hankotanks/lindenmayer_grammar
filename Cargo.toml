@@ -1,15 +1,10 @@
 [package]
-name = "lindenmayer_system_framework"
+name = "lsys_grammar"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dev-dependencies]
-turtle = {git = "https://github.com/sunjay/turtle"}
-
 [lib]
-name = "lindenmayer_system_framework"
+name = "lsys_grammar"
 path = "src/lib.rs"
 
 [[example]]
@@ -19,3 +14,6 @@ path = "examples/fractal_tree/main.rs"
 [[example]]
 name = "cantor_set"
 path = "examples/cantor_set/main.rs"
+
+[dev-dependencies]
+turtle = {git = "https://github.com/sunjay/turtle"}

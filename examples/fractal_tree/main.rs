@@ -1,9 +1,8 @@
 use std::collections::VecDeque;
 
-use lindenmayer_system_framework::{
+use lsys_grammar::{
     Axiom, 
-    rules,
-    rewrite_in_place
+    rules
 };
 
 use turtle::{
@@ -64,7 +63,7 @@ fn main() {
         Leaf => Node : Left : Leaf : Right : Leaf
     );
 
-    for _n in 0..DEPTH { rewrite_in_place(&rules, &mut axiom); }
+    for _n in 0..DEPTH { axiom.rewrite(&rules); }
 
     draw_fractal_tree(&axiom, DEPTH);
 }

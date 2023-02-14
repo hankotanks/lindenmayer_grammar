@@ -1,3 +1,59 @@
+//! A minimal implementation of the Lindenmayer grammar using Enum alphabets
+//! 
+//! The basic unit of an L-system is its alphabet, which is a user-defined, data-less Enum that defines a few basic traits.
+//! 
+//! ```
+//! #[derive(Clone, Copy, PartialEq, Debug)]
+//! enum FractalTreeAlphabet { Leaf, Node, Left, Right }
+//! ```
+//! 
+//! An [Axiom] is a sentence of symbols from a single alphabet.
+//! 
+//! ```
+//! // Creating an axiom from a collection of symbols
+//! use FractalTreeAlphabet::*
+//! let axiom = Axiom::from(vec![Node, Left, Leaf, Right, Leaf]);
+//! 
+//! // ...or from a single symbol
+//! let axiom = Axiom::from(FractalTreeAlphabet::Leaf);
+//! ```
+//! 
+//! Axioms can be rewritten using a [Ruleset], which itself is a number of [Production] rules.
+//! 
+//! ```
+//! // Defining productions using a macro
+//! let p1 = production!(Node => Node : Node);
+//! let p2 = production!(Leaf => Node : Left : Leaf : Right : Leaf);
+//! 
+//! // Building the Ruleset...
+//! let rules = Ruleset::from(vec![p1, p2]);
+//! 
+//! // ...or use the provided macro
+//! let rules = rules!(
+//!     Node => Node : Node, 
+//!     Leaf => Node : Left : Leaf : Right : Leaf
+//! );
+//! 
+//! // Rewrite the Axiom using the Ruleset
+//! axiom.rewrite(&rules); // dbg: [Node, Left, Leaf, Right, Leaf]
+//! ```
+//! 
+//! Axioms themselves are iterators. Iteration is reset upon exhaustion, allowing it to be easily reused.
+//! 
+//! ```
+//! // dbg: Node, Left, Leaf, Right, Leaf, 
+//! for symbol in axiom {
+//!     print!("{:?}, ", symbol);
+//! }
+//! 
+//! // We can still collect the Axiom
+//! axiom.collect::<Vec<_>>(); // dbg: [Node, Left, Leaf, Right, Leaf]
+//! ```
+//! 
+//! All given examples use the [Turtle](https://turtle.rs/) crate to easily visualize the results of L-system expansion.
+//! 
+//! I decided that drawing functionality was outside the scope of this crate; check out the [dcc-lsystem](https://crates.io/crates/dcc-lsystem) crate by Robert Usher for a more in-depth implementation that allows axioms to be mapped directly to turtle commands.
+
 use std::{
     cell::Cell, 
     fmt::Debug
@@ -66,6 +122,55 @@ impl<A> Debug for Axiom<A> where A: Alphabet {
     }
 }
 
+#[inline]
+fn matcher<A: Alphabet>(rule: &Production<A>, slice: &[A]) -> Option<usize> {
+    (1..=slice.len()).find(|&i| rule.matcher.0 == slice[0..i])
+}
+
+impl<A> Axiom<A> where A: Alphabet {
+    pub fn step(&self, rules: &Ruleset<A>) -> Axiom<A> {
+        let mut output: Vec<A> = Vec::new();
+    
+        let mut pointer = 0;
+        'token: while pointer < self.0.len() {
+            for rule in rules.0.iter() {
+                if let Some(token_length) = matcher(rule, &self.0[pointer..]) {
+                    pointer += token_length;
+                    output.append(&mut rule.transcriber.0.clone());
+                    
+                    continue 'token;
+                }
+            }
+    
+            output.push(self.0[pointer]);
+        }
+    
+        output.into()
+    }
+    pub fn rewrite(&mut self, rules: &Ruleset<A>) {
+        let mut size = self.0.len() as i32;
+
+        let mut pointer = 0;
+        'token: while (pointer as i32) < size {
+            for rule in rules.0.iter() {
+                if let Some(token_length) = matcher(rule, &self.0[pointer..]) {
+                    self.0.drain(pointer..(pointer + token_length));
+                    rule.transcriber.0.iter().rev().for_each(|token| { 
+                        self.0.insert(pointer, *token); 
+                    } );
+
+                    pointer += rule.transcriber.0.len();
+                    size += rule.transcriber.0.len() as i32 - token_length as i32;
+                    
+                    continue 'token;
+                }
+            }
+
+            pointer += 1;
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct Production<A: Alphabet> {
     matcher: Axiom<A>,
@@ -130,58 +235,11 @@ impl<A> Debug for Ruleset<A> where A: Alphabet {
     }
 }
 
-#[inline]
-fn matcher<A: Alphabet>(rule: &Production<A>, slice: &[A]) -> Option<usize> {
-    (1..=slice.len()).find(|&i| rule.matcher.0 == slice[0..i])
-}
-
-pub fn rewrite<A: Alphabet>(rules: &Ruleset<A>, mut axiom: Axiom<A>) -> Axiom<A> {
-    let mut output: Vec<A> = Vec::new();
-
-    'token: while !axiom.0.is_empty() {
-        for rule in rules.0.iter() {
-            if let Some(token_length) = matcher(rule, &axiom.0) {
-                axiom.0.drain(0..token_length);
-                output.append(&mut rule.transcriber.0.clone());
-                
-                continue 'token;
-            }
-        }
-
-        output.push(axiom.0.remove(0));
-    }
-
-    output.into()
-}
-
-pub fn rewrite_in_place<A: Alphabet>(rules: &Ruleset<A>, axiom: &mut Axiom<A>) {
-    let mut size = axiom.0.len() as i32;
-
-    let mut pointer = 0;
-    'token: while (pointer as i32) < size {
-        for rule in rules.0.iter() {
-            if let Some(token_length) = matcher(rule, &axiom.0[pointer..]) {
-                axiom.0.drain(pointer..(pointer + token_length));
-                rule.transcriber.0.iter().rev().for_each(|token| { 
-                    axiom.0.insert(pointer, *token); 
-                } );
-
-                pointer += rule.transcriber.0.len();
-                size += rule.transcriber.0.len() as i32 - token_length as i32;
-                
-                continue 'token;
-            }
-        }
-
-        pointer += 1;
-    }
-}
-
 #[macro_export]
 macro_rules! rules {
     ($($a:path $(: $b:path)* => $c:path $(: $d:path)*),+) => {
         {
-            use lindenmayer_system_framework::{production, Ruleset};
+            use lsys_grammar::{production, Ruleset};
 
             let mut rules = Vec::new();
             $(rules.push(production!($a $(: $b)* => $c $(: $d)*));)+
@@ -195,7 +253,7 @@ macro_rules! rules {
 macro_rules! production {
     ($a:path $(: $b:path)*) => {
         {
-            use lindenmayer_system_framework::{Axiom, Production};
+            use lsys_grammar::{Axiom, Production};
         
             let mut matcher = vec![$a];
             $(matcher.push($b);)*
@@ -205,7 +263,7 @@ macro_rules! production {
     };
     ($a:path $(: $b:path)* => $c:path $(: $d:path)*) => {
         {
-            use lindenmayer_system_framework::{Axiom, Production};
+            use lsys_grammar::{Axiom, Production};
 
             let mut matcher = vec![$a];
             $(matcher.push($b);)*

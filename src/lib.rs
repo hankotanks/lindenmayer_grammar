@@ -1,69 +1,90 @@
 //! A minimal implementation of the Lindenmayer grammar using Enum alphabets
 //! 
-//! The basic unit of an L-system is its alphabet, which is a user-defined, data-less Enum that defines a few basic traits.
+//! L-systems can be defined by three attributes
+//! - An [Alphabet] of symbols[^a]
+//! - A set of [Production] rules, called a [Ruleset]
+//! - An intial [Axiom]
+//! 
+//! # Example
+//! 
+//! Below is a simple implementation of a binary fractal tree L-system.
 //! 
 //! ```
+//! use lsys_grammar::{Axiom, rules};
+//! 
+//! // Define the alphabet and derive necessary traits
 //! #[derive(Clone, Copy, PartialEq, Debug)]
-//! enum FractalTreeAlphabet { Leaf, Node, Left, Right }
-//! ```
+//! enum BFTAlphabet { Leaf, Node, Left, Right }
 //! 
-//! An [Axiom] is a sentence of symbols from a single alphabet.
+//! fn main() {
+//!     use BFTAlphabet::*;
 //! 
-//! ```
-//! // Creating an axiom from a collection of symbols
-//! use FractalTreeAlphabet::*
-//! let axiom = Axiom::from(vec![Node, Left, Leaf, Right, Leaf]);
+//!     // The L-system initiator
+//!     let mut axiom = Axiom::from(Leaf);
 //! 
-//! // ...or from a single symbol
-//! let axiom = Axiom::from(FractalTreeAlphabet::Leaf);
-//! ```
+//!     // Declare the system's productions with the rules! macro
+//!     let rules = rules!(
+//!         Node => Node : Node,
+//!         Leaf => Node : Left : Leaf : Right : Leaf
+//!     );
 //! 
-//! Axioms can be rewritten using a [Ruleset], which itself is a number of [Production] rules.
-//! 
-//! ```
-//! // Defining productions using a macro
-//! let p1 = production!(Node => Node : Node);
-//! let p2 = production!(Leaf => Node : Left : Leaf : Right : Leaf);
-//! 
-//! // Building the Ruleset...
-//! let rules = Ruleset::from(vec![p1, p2]);
-//! 
-//! // ...or use the provided macro
-//! let rules = rules!(
-//!     Node => Node : Node, 
-//!     Leaf => Node : Left : Leaf : Right : Leaf
-//! );
-//! 
-//! // Rewrite the Axiom using the Ruleset
-//! axiom.rewrite(&rules); // dbg: [Node, Left, Leaf, Right, Leaf]
-//! ```
-//! 
-//! Axioms themselves are iterators. Iteration is reset upon exhaustion, allowing it to be easily reused.
-//! 
-//! ```
-//! // dbg: Node, Left, Leaf, Right, Leaf, 
-//! for symbol in axiom {
-//!     print!("{:?}, ", symbol);
+//!     // The axiom is rewritten using the defined rules, resulting in
+//!     // [Node, Left, Leaf, Right, Leaf]
+//!     axiom.rewrite(&rules); 
 //! }
-//! 
-//! // We can still collect the Axiom
-//! axiom.collect::<Vec<_>>(); // dbg: [Node, Left, Leaf, Right, Leaf]
 //! ```
 //! 
-//! All given examples use the [Turtle](https://turtle.rs/) crate to easily visualize the results of L-system expansion.
-//! 
-//! I decided that drawing functionality was outside the scope of this crate; check out the [dcc-lsystem](https://crates.io/crates/dcc-lsystem) crate by Robert Usher for a more in-depth implementation that allows axioms to be mapped directly to turtle commands.
+//! [^a]: In this crate, any type which implements `Clone`, `Copy`, `PartialEq` and `Debug` is considered an Alphabet. Enums are ideal for this use case.
 
 use std::{
     cell::Cell, 
     fmt::Debug
 };
 
+/// An internal trait that is automatically implied for all types that can be used as valid alphabets.
+/// 
+/// Any type which implements `Clone`, `Copy`, `PartialEq` and `Debug` is considered an Alphabet. This trait does not need to be derived.
+/// 
+/// # Examples
+/// 
+/// ```
+/// #[derive(Clone, Copy, PartialEq, Debug)]
+/// enum Koch { Forward, Left, Right }
+/// ```
 pub trait Alphabet: Clone + Copy + PartialEq + Debug {  }
 
 impl<T> Alphabet for T where T: Clone + Copy + PartialEq + Debug {  }
 
-#[derive(Clone, PartialEq, Eq)]
+/// A sentence of symbols from a single `Alphabet`.
+/// 
+/// An axiom can be initialized from a single symbol or a collection of symbols.
+/// When provided a `Ruleset`, an Axiom can be rewritten, either with the creation of a new Axiom (through the associated `step` method) or mutably (with `rewrite`).
+/// 
+/// The collection of symbols that underpin an Axiom cannot be accessed, although Axioms themselves are iterators. 
+/// Iteration is reset upon exhaustion, allowing it to be easily reused.
+/// The partial consumption of an axiom should be avoided for this reason.
+/// Cloning resets iteration to the first element.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use lsys_grammar::{Axiom, rules};
+/// 
+/// // i32 implements the requisite traits
+/// let mut axiom = Axiom::from(vec![0, 1, 0]);
+/// 
+/// for _ in 0..3 {
+///     // Rewrite the axiom using Lindenmayer's algae model
+///     axiom.rewrite(rules!(0 => 0 : 1, 1 => 0));
+/// }
+/// 
+/// // We can iterate through the axiom, printing each element...
+/// for symbol in axiom { print!("{:?}, ", symbol); }
+/// 
+/// // The iterator can still be collected
+/// let elements = axiom.collect::<Vec<_>>();
+/// ```
+#[derive(PartialEq, Eq)]
 pub struct Axiom<A>(Vec<A>, Cell<usize>) where A: Alphabet;
 
 impl<A> Axiom<A> where A: Alphabet {
@@ -81,6 +102,12 @@ impl<A> From<A> for Axiom<A> where A: Alphabet {
 impl<A> From<Vec<A>> for Axiom<A> where A: Alphabet {
     fn from(tokens: Vec<A>) -> Self {
         Self(tokens, Cell::new(0))
+    }
+}
+
+impl<A> Clone for Axiom<A> where A: Alphabet {
+    fn clone(&self) -> Self {
+        Self(self.0.clone(), Cell::new(0))
     }
 }
 
@@ -128,6 +155,28 @@ fn matcher<A: Alphabet>(rule: &Production<A>, slice: &[A]) -> Option<usize> {
 }
 
 impl<A> Axiom<A> where A: Alphabet {
+    /// Produces a new Axiom from the provided `Ruleset`.
+    /// 
+    /// Can be used when the initial axiom shouldn't be consumed.
+    /// For example, if we want to accumulate all generations of an L-system.
+    /// 
+    /// Axioms can be rewritten in place using their associated `rewrite` method.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use lsys_grammar::{Axiom, rules};
+    /// 
+    /// // Define the Ruleset for Lindenmayer's algae model
+    /// let rules = rules!(0 => 0 : 1, 1 => 0);
+    /// 
+    /// let mut axioms = vec![Axiom::from(0)];
+    /// 
+    /// for _ in 0..3 {
+    ///     // Each step, push the new axiom to the list of previous axioms
+    ///     axioms.push(axioms.last().unwrap().step(&rules));
+    /// }
+    /// ```
     pub fn step(&self, rules: &Ruleset<A>) -> Axiom<A> {
         let mut output: Vec<A> = Vec::new();
     
@@ -147,6 +196,25 @@ impl<A> Axiom<A> where A: Alphabet {
     
         output.into()
     }
+
+    /// Rewrites the axiom using the given `Ruleset`
+    /// 
+    /// Should be used to quickly step through all generations of an L-system to a desired point.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use lsys_grammar::{Axiom, rules};
+    /// 
+    /// // Define the Ruleset for Lindenmayer's algae model
+    /// let rules = rules!(0 => 0 : 1, 1 => 0);
+    /// 
+    /// // Create the system's initiator
+    /// let mut axiom = Axiom::from(0);
+    /// 
+    /// // Continue to rewrite it until its length exceeds 100 symbols
+    /// while axiom.len() < 100 { axiom.rewrite(&rules); }
+    /// ```
     pub fn rewrite(&mut self, rules: &Ruleset<A>) {
         let mut size = self.0.len() as i32;
 
@@ -169,8 +237,49 @@ impl<A> Axiom<A> where A: Alphabet {
             pointer += 1;
         }
     }
+
+    /// Returns the length of the current Axiom
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use lsys_grammar::Axiom;
+    /// 
+    /// assert_eq!(Axiom::from(vec![0, 1, 0, 1]).len(), 4);
+    /// ```
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
+/// A rule that dictates how symbols are rewritten in an L-System.
+/// 
+/// Each `Production` consists of two axioms
+/// - the matcher
+/// - the transcriber
+/// 
+/// When the matcher is found in a given `Axiom`, it is replaced with the transcriber.
+/// Productions are most easily defined using the `production!` macro.
+/// 
+/// Productions cannot be applied to axioms on their own, they must be compiled into a `Ruleset` first.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use lsys_grammar::{Axiom, Ruleset, Production, production};
+/// 
+/// let mut axiom = Axiom::from(0);
+/// 
+/// // Create two productions. The former uses the struct definition, the second uses a macro
+/// let p1 = Production::new(Axiom::from(0), Axiom::from(vec![0, 1]));
+/// let p2 = production!(1 => 0);
+/// 
+/// // Compile the two productions into a Ruleset
+/// let rules = Ruleset::from(vec![p1, p2]);
+/// 
+/// // Apply the Ruleset
+/// axiom.rewrite(&rules);
+/// ```
 #[derive(Clone, PartialEq, Eq)]
 pub struct Production<A: Alphabet> {
     matcher: Axiom<A>,
@@ -178,6 +287,22 @@ pub struct Production<A: Alphabet> {
 }
 
 impl<A> Production<A> where A: Alphabet {
+    /// Creates a new Production from two Axioms
+    /// 
+    /// Consider using the more concise `production!` macro syntax.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use lsys_grammar::{Production, production};
+    /// 
+    /// // Create two identical productions. The former uses the struct definition, the second uses a macro
+    /// let p1 = Production::new(Axiom::from(0), Axiom::from(vec![0, 1]));
+    /// let p2 = production!(0 => 0 : 1);
+    /// 
+    /// // The two productions are equal
+    /// assert_eq!(p1, p2);
+    /// ```
     pub fn new(matcher: Axiom<A>, transcriber: Axiom<A>) -> Self {
         Self { matcher, transcriber }
     }
@@ -195,20 +320,26 @@ impl<A> Debug for Production<A> where A: Alphabet {
     }
 }
 
+/// An ordered collection of `Production` rules.
+/// 
+/// Can be created from a single production, a collection of productions, or through the `rules!` macro.
+/// Identity productions are implicit, and do not need to be added to the Ruleset.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use lsys_grammar::{Ruleset, rules, production};
+/// 
+/// // The following Ruleset initializations are equivalent
+/// let rs = rules!(0 => 0 : 1, 1 => 0);
+/// let rs = Ruleset::from(vec![production!(0 => 0 : 1), production!(1 => 0)]);
+/// ```
 #[derive(Clone)]
 pub struct Ruleset<A>(Vec<Production<A>>) where A: Alphabet;
 
 impl<A> Default for Ruleset<A> where A: Alphabet {
     fn default() -> Self {
         Self(Default::default())
-    }
-}
-
-impl<A> Ruleset<A> where A: Alphabet {
-    pub fn add(&mut self, rule: Production<A>) {
-        if !self.0.contains(&rule) {
-            self.0.push(rule);
-        }
     }
 }
 
@@ -235,8 +366,30 @@ impl<A> Debug for Ruleset<A> where A: Alphabet {
     }
 }
 
+#[doc = "Builds a rulest from a comma-separated list of `Production` statements."]
+#[doc = ""]
+#[doc = "Matcher and transcriber `Axioms` should be separated by a `=>` symbol."]
+#[doc = "The elements of the two components should be separated with a colon."]
+#[doc = ""]
+#[doc = "# Examples"]
+#[doc = ""]
+#[doc = "```"]
+#[doc = "use lsys_grammar::rules;"]
+#[doc = ""]
+#[doc = "rules!(0 => 0 : 1, 1 => 0;"]
+#[doc = "```"]
 #[macro_export]
 macro_rules! rules {
+    ($($a:literal $(: $b:literal)* => $c:literal $(: $d:literal)*),+) => {
+        {
+            use lsys_grammar::{production, Ruleset};
+
+            let mut rules = Vec::new();
+            $(rules.push(production!($a $(: $b)* => $c $(: $d)*));)+
+            
+            Ruleset::from(rules)
+        }
+    };
     ($($a:path $(: $b:path)* => $c:path $(: $d:path)*),+) => {
         {
             use lsys_grammar::{production, Ruleset};
@@ -246,11 +399,49 @@ macro_rules! rules {
             
             Ruleset::from(rules)
         }
-    }
+    };
 }
 
+#[doc = "A wrapper to create a single `Production`."]
+#[doc = ""]
+#[doc = "Matcher and transcriber `Axioms` should be separated by a `=>` symbol."]
+#[doc = "The elements of the two components should be separated with a colon."]
+#[doc = ""]
+#[doc = "# Examples"]
+#[doc = ""]
+#[doc = "```"]
+#[doc = "use lsys_grammar::{Production, production};"]
+#[doc = ""]
+#[doc = "production!(0 => 0 : 1);"]
+#[doc = ""]
+#[doc = "// This is equivalent to..."]
+#[doc = "Production::new(Axiom::from(0), Axiom::from(vec![0, 1]));"]
+#[doc = "```"]
 #[macro_export]
 macro_rules! production {
+    ($a:literal $(: $b:literal)*) => {
+        {
+            use lsys_grammar::{Axiom, Production};
+        
+            let mut matcher = vec![$a];
+            $(matcher.push($b);)*
+    
+            Production::new(Axiom::from(matcher.clone()), Axiom::from(matcher))
+        }
+    };
+    ($a:literal $(: $b:literal)* => $c:literal $(: $d:literal)*) => {
+        {
+            use lsys_grammar::{Axiom, Production};
+
+            let mut matcher = vec![$a];
+            $(matcher.push($b);)*
+
+            let mut transcriber = vec![$c];
+            $(transcriber.push($d);)*
+
+            Production::new(Axiom::from(matcher), Axiom::from(transcriber))
+        }
+    };
     ($a:path $(: $b:path)*) => {
         {
             use lsys_grammar::{Axiom, Production};

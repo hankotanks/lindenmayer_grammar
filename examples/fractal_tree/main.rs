@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use lsys_grammar::{
+use lindemayer_grammar::{
     Axiom, 
     rules
 };

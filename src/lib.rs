@@ -10,7 +10,7 @@
 //! Below is a simple implementation of a binary fractal tree L-system.
 //! 
 //! ```
-//! use lsys_grammar::{Axiom, rules};
+//! use lindemayer_grammar::{Axiom, rules};
 //! 
 //! // Define the alphabet and derive necessary traits
 //! #[derive(Clone, Copy, PartialEq, Debug)]
@@ -68,7 +68,7 @@ impl<T> Alphabet for T where T: Clone + Copy + PartialEq + Debug {  }
 /// # Examples
 /// 
 /// ```
-/// use lsys_grammar::{Axiom, rules};
+/// use lindemayer_grammar::{Axiom, rules};
 /// 
 /// // i32 implements the requisite traits
 /// let mut axiom = Axiom::from(vec![0, 1, 0]);
@@ -165,7 +165,7 @@ impl<A> Axiom<A> where A: Alphabet {
     /// # Examples
     /// 
     /// ```
-    /// use lsys_grammar::{Axiom, rules};
+    /// use lindemayer_grammar::{Axiom, rules};
     /// 
     /// // Define the Ruleset for Lindenmayer's algae model
     /// let rules = rules!(0 => 0 : 1, 1 => 0);
@@ -206,7 +206,7 @@ impl<A> Axiom<A> where A: Alphabet {
     /// # Examples
     /// 
     /// ```
-    /// use lsys_grammar::{Axiom, rules};
+    /// use lindemayer_grammar::{Axiom, rules};
     /// 
     /// // Define the Ruleset for Lindenmayer's algae model
     /// let rules = rules!(0 => 0 : 1, 1 => 0);
@@ -245,7 +245,7 @@ impl<A> Axiom<A> where A: Alphabet {
     /// # Examples
     /// 
     /// ```
-    /// use lsys_grammar::Axiom;
+    /// use lindemayer_grammar::Axiom;
     /// 
     /// assert_eq!(Axiom::from(vec![0, 1, 0, 1]).len(), 4);
     /// ```
@@ -268,7 +268,7 @@ impl<A> Axiom<A> where A: Alphabet {
 /// # Examples
 /// 
 /// ```
-/// use lsys_grammar::{Axiom, Ruleset, Production, production};
+/// use lindemayer_grammar::{Axiom, Ruleset, Production, production};
 /// 
 /// let mut axiom = Axiom::from(0);
 /// 
@@ -296,7 +296,7 @@ impl<A> Production<A> where A: Alphabet {
     /// # Examples
     /// 
     /// ```
-    /// use lsys_grammar::{Axiom, Production, production};
+    /// use lindemayer_grammar::{Axiom, Production, production};
     /// 
     /// // Create two identical productions. The former uses the struct definition, the second uses a macro
     /// let p1 = Production::new(Axiom::from(0), Axiom::from(vec![0, 1]));
@@ -331,7 +331,7 @@ impl<A> Debug for Production<A> where A: Alphabet {
 /// # Examples
 /// 
 /// ```
-/// use lsys_grammar::{Ruleset, rules, production};
+/// use lindemayer_grammar::{Ruleset, rules, production};
 /// 
 /// // The following Ruleset initializations are equivalent
 /// let rs = rules!(0 => 0 : 1, 1 => 0);
@@ -361,6 +361,7 @@ impl<A> From<Vec<Production<A>>> for Ruleset<A> where A: Alphabet {
 impl<A> Debug for Ruleset<A> where A: Alphabet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut dbg_builder = f.debug_struct("Rules");
+
         for (idx, item) in self.0.iter().enumerate() {
             dbg_builder.field(&format!("{}", idx), item);
         }
@@ -378,7 +379,7 @@ impl<A> Debug for Ruleset<A> where A: Alphabet {
 /// # Examples
 /// 
 /// ```
-/// use lsys_grammar::rules;
+/// use lindemayer_grammar::rules;
 ///
 /// rules!(0 => 0 : 1, 1 => 0);
 /// ```
@@ -386,7 +387,7 @@ impl<A> Debug for Ruleset<A> where A: Alphabet {
 macro_rules! rules {
     ($($a:literal $(: $b:literal)* => $c:literal $(: $d:literal)*),+) => {
         {
-            use lsys_grammar::{production, Ruleset};
+            use lindemayer_grammar::{production, Ruleset};
 
             let mut rules = Vec::new();
             $(rules.push(production!($a $(: $b)* => $c $(: $d)*));)+
@@ -396,7 +397,7 @@ macro_rules! rules {
     };
     ($($a:path $(: $b:path)* => $c:path $(: $d:path)*),+) => {
         {
-            use lsys_grammar::{production, Ruleset};
+            use lindemayer_grammar::{production, Ruleset};
 
             let mut rules = Vec::new();
             $(rules.push(production!($a $(: $b)* => $c $(: $d)*));)+
@@ -415,7 +416,7 @@ macro_rules! rules {
 /// # Examples
 /// 
 /// ```
-/// use lsys_grammar::{Axiom, Production, production};
+/// use lindemayer_grammar::{Axiom, Production, production};
 /// 
 /// production!(0 => 0 : 1);
 /// 
@@ -426,7 +427,7 @@ macro_rules! rules {
 macro_rules! production {
     ($a:literal $(: $b:literal)*) => {
         {
-            use lsys_grammar::{Axiom, Production};
+            use lindemayer_grammar::{Axiom, Production};
         
             let mut matcher = vec![$a];
             $(matcher.push($b);)*
@@ -436,7 +437,7 @@ macro_rules! production {
     };
     ($a:literal $(: $b:literal)* => $c:literal $(: $d:literal)*) => {
         {
-            use lsys_grammar::{Axiom, Production};
+            use lindemayer_grammar::{Axiom, Production};
 
             let mut matcher = vec![$a];
             $(matcher.push($b);)*
@@ -449,7 +450,7 @@ macro_rules! production {
     };
     ($a:path $(: $b:path)*) => {
         {
-            use lsys_grammar::{Axiom, Production};
+            use lindemayer_grammar::{Axiom, Production};
         
             let mut matcher = vec![$a];
             $(matcher.push($b);)*
@@ -459,7 +460,7 @@ macro_rules! production {
     };
     ($a:path $(: $b:path)* => $c:path $(: $d:path)*) => {
         {
-            use lsys_grammar::{Axiom, Production};
+            use lindemayer_grammar::{Axiom, Production};
 
             let mut matcher = vec![$a];
             $(matcher.push($b);)*
@@ -468,6 +469,42 @@ macro_rules! production {
             $(transcriber.push($d);)*
 
             Production::new(Axiom::from(matcher), Axiom::from(transcriber))
+        }
+    };
+}
+
+/// Analagous to `Axiom::from()`, but does not require the instantiation of an intermediate Vec.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use lindemayer_grammar::{Axiom, axiom};
+/// 
+/// axiom!(0, 1, 0);
+/// 
+/// // This is equivalent to...
+/// Axiom::from(vec![0, 1, 0]);
+/// ```
+#[macro_export]
+macro_rules! axiom {
+    ($($a:literal),+) => {
+        {
+            use lindemayer_grammar::{Axiom, Production};
+
+            let mut elements = Vec::new();
+            $(elements.push($a);)+
+
+            Axiom::from(elements)
+        }
+    };
+    ($($a:path),+) => {
+        {
+            use lindemayer_grammar::{Axiom, Production};
+
+            let mut elements = Vec::new();
+            $(elements.push($a);)+
+
+            Axiom::from(elements)
         }
     };
 }

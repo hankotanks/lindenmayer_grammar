@@ -1,4 +1,4 @@
-use lsys_grammar::{
+use lindemayer_grammar::{
     rules, 
     Axiom,
 };

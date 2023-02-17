@@ -1,11 +1,11 @@
-use lindemayer_grammar::{
+use lindenmayer_grammar::{
     rules, 
     Axiom,
 };
 
 use turtle::Drawing;
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum CantorSetAlphabet { A, B }
 
 fn draw_cantor_set(axioms: &Vec<Axiom<CantorSetAlphabet>>) {
@@ -34,7 +34,7 @@ fn draw_cantor_set(axioms: &Vec<Axiom<CantorSetAlphabet>>) {
             turtle.go_to((0., i as f64));
             turtle.pen_down();
 
-            for token in step {
+            for token in step.iter() {
                 match token {
                     A => { turtle.forward(distance); },
                     B => {

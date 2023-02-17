@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use lindemayer_grammar::{
+use lindenmayer_grammar::{
     Axiom, 
     rules
 };
@@ -10,7 +10,7 @@ use turtle::{
     Speed
 };
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum FractalTreeAlphabet { Leaf, Node, Left, Right }
 
 const BASE_SEG_LENGTH: f64 = 300.;
@@ -30,7 +30,7 @@ fn draw_fractal_tree(axiom: &Axiom<FractalTreeAlphabet>, depth: i32) {
     let seg_length = BASE_SEG_LENGTH / 2f64.powi(depth);
 
     // draw the tree
-    for token in axiom {
+    for token in axiom.iter() {
         match token {
             Leaf => { 
                 turtle.forward(seg_length);
@@ -57,7 +57,7 @@ const DEPTH: i32 = 3;
 fn main() {
     use FractalTreeAlphabet::*;
     let mut axiom = Axiom::from(Leaf);
-
+    
     let rules = rules!(
         Node => Node : Node, 
         Leaf => Node : Left : Leaf : Right : Leaf

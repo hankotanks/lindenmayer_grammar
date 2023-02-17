@@ -830,7 +830,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "lindemayer_grammar"
+name = "lindenmayer_grammar"
 version = "0.1.0"
 dependencies = [
  "turtle",

@@ -10,10 +10,10 @@
 //! Below is a simple implementation of a binary fractal tree L-system.
 //! 
 //! ```
-//! use lindemayer_grammar::{Axiom, rules};
+//! use lindenmayer_grammar::{Axiom, rules};
 //! 
 //! // Define the alphabet and derive necessary traits
-//! #[derive(Clone, Copy, PartialEq, Debug)]
+//! #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 //! enum BFTAlphabet { Leaf, Node, Left, Right }
 //! 
 //! fn main() {
@@ -34,16 +34,17 @@
 //! }
 //! ```
 //! 
-//! [^a]: In this crate, any type which implements `Clone`, `Copy`, `PartialEq` and `Debug` is considered an Alphabet. Enums are ideal for this use case.
+//! [^a]: In this crate, any type which implements `Clone` and `Ord` is considered an Alphabet. Any integer type is ideal for this use case, but Enums can work too!
 
 use std::{
     cell::Cell, 
-    fmt::Debug
+    fmt::Debug, 
+    collections::BTreeSet
 };
 
 /// An internal trait that is automatically implied for all types that can be used as valid alphabets.
 /// 
-/// Any type which implements `Clone`, `Copy`, `PartialEq` and `Debug` is considered an Alphabet. This trait does not need to be derived.
+/// Any type which implements `Clone`, and `Ord` is considered an Alphabet. This trait does not need to be derived.
 /// 
 /// # Examples
 /// 
@@ -51,24 +52,21 @@ use std::{
 /// #[derive(Clone, Copy, PartialEq, Debug)]
 /// enum Koch { Forward, Left, Right }
 /// ```
-pub trait Alphabet: Clone + Copy + PartialEq + Debug {  }
+pub trait Alphabet: Clone + Ord {  }
 
-impl<T> Alphabet for T where T: Clone + Copy + PartialEq + Debug {  }
+impl<T> Alphabet for T where T: Clone + Ord {  }
 
 /// A sentence of symbols from a single [Alphabet].
 /// 
 /// An axiom can be initialized from a single symbol or a collection of symbols.
 /// When provided a [Ruleset], an Axiom can be rewritten, either with the creation of a new Axiom (through the associated [step](#method:step) method) or mutably with [rewrite](#method:rewrite).
 /// 
-/// The collection of symbols that underpin an Axiom cannot be accessed, although Axioms themselves are iterators. 
-/// Iteration is reset upon exhaustion, allowing it to be easily reused.
-/// The partial consumption of an axiom should be avoided for this reason.
-/// Cloning resets iteration to the first element.
+/// The collection of symbols that underpin an Axiom cannot be accessed, although they can be turned into iterators with the associated [iter](#method:iter) method.
 /// 
 /// # Examples
 /// 
 /// ```
-/// use lindemayer_grammar::{Axiom, rules};
+/// use lindenmayer_grammar::{Axiom, rules};
 /// 
 /// // i32 implements the requisite traits
 /// let mut axiom = Axiom::from(vec![0, 1, 0]);
@@ -84,68 +82,40 @@ impl<T> Alphabet for T where T: Clone + Copy + PartialEq + Debug {  }
 /// // The iterator can still be collected
 /// let elements = axiom.collect::<Vec<_>>();
 /// ```
-#[derive(PartialEq, Eq)]
-pub struct Axiom<A>(Vec<A>, Cell<usize>) where A: Alphabet;
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Axiom<A>(Vec<A>) where A: Alphabet;
 
 impl<A> Axiom<A> where A: Alphabet {
     pub fn size(&self) -> usize {
         self.0.len()
     }
+
+    pub fn iter(&self) -> AxiomIterator<'_, A> {
+        AxiomIterator::new(self)
+    }
 }
 
 impl<A> From<A> for Axiom<A> where A: Alphabet {
     fn from(token: A) -> Self {
-        Self(vec![token], Cell::new(0))
+        Self(vec![token])
     }
 }
 
 impl<A> From<Vec<A>> for Axiom<A> where A: Alphabet {
     fn from(tokens: Vec<A>) -> Self {
-        Self(tokens, Cell::new(0))
+        Self(tokens)
     }
 }
 
-impl<A> Clone for Axiom<A> where A: Alphabet {
-    fn clone(&self) -> Self {
-        Self(self.0.clone(), Cell::new(0))
+impl<A> From<&[A]> for Axiom<A> where A: Alphabet {
+    fn from(tokens: &[A]) -> Self {
+        Self(tokens.to_vec())
     }
 }
 
-impl<A> Iterator for Axiom<A> where A: Alphabet {
-    type Item = A;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let item = self.0.get(self.1.get()).copied();
-
-        if item.is_none() { 
-            self.1.set(0); 
-        } else {
-            self.1.set(self.1.get() + 1);
-        }
-
-        item
-    }
-}
-
-impl<A> Iterator for &Axiom<A> where A: Alphabet {
-    type Item = A;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let item = self.0.get(self.1.get()).copied();
-
-        if item.is_none() { 
-            self.1.set(0); 
-        } else {
-            self.1.set(self.1.get() + 1);
-        }
-
-        item
-    }
-}
-
-impl<A> Debug for Axiom<A> where A: Alphabet {
+impl<A> Debug for Axiom<A> where A: Alphabet + Debug {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list().entries(self).finish()
+        f.debug_list().entries(self.iter()).finish()
     }
 }
 
@@ -165,12 +135,12 @@ impl<A> Axiom<A> where A: Alphabet {
     /// # Examples
     /// 
     /// ```
-    /// use lindemayer_grammar::{Axiom, rules};
+    /// use lindenmayer_grammar::{Axiom, rules};
+    /// 
+    /// let mut axioms = vec![Axiom::from(0)];
     /// 
     /// // Define the Ruleset for Lindenmayer's algae model
     /// let rules = rules!(0 => 0 : 1, 1 => 0);
-    /// 
-    /// let mut axioms = vec![Axiom::from(0)];
     /// 
     /// for _ in 0..3 {
     ///     // Each step, push the new axiom to the list of previous axioms
@@ -191,7 +161,7 @@ impl<A> Axiom<A> where A: Alphabet {
                 }
             }
     
-            output.push(self.0[pointer]);
+            output.push(self.0[pointer].clone());
         }
     
         output.into()
@@ -206,7 +176,7 @@ impl<A> Axiom<A> where A: Alphabet {
     /// # Examples
     /// 
     /// ```
-    /// use lindemayer_grammar::{Axiom, rules};
+    /// use lindenmayer_grammar::{Axiom, rules};
     /// 
     /// // Define the Ruleset for Lindenmayer's algae model
     /// let rules = rules!(0 => 0 : 1, 1 => 0);
@@ -225,8 +195,8 @@ impl<A> Axiom<A> where A: Alphabet {
             for rule in rules.0.iter() {
                 if let Some(token_length) = matcher(rule, &self.0[pointer..]) {
                     self.0.drain(pointer..(pointer + token_length));
-                    rule.transcriber.0.iter().rev().for_each(|token| { 
-                        self.0.insert(pointer, *token); 
+                    rule.transcriber.0.iter().cloned().rev().for_each(|token| { 
+                        self.0.insert(pointer, token); 
                     } );
 
                     pointer += rule.transcriber.0.len();
@@ -245,12 +215,66 @@ impl<A> Axiom<A> where A: Alphabet {
     /// # Examples
     /// 
     /// ```
-    /// use lindemayer_grammar::Axiom;
+    /// use lindenmayer_grammar::Axiom;
     /// 
     /// assert_eq!(Axiom::from(vec![0, 1, 0, 1]).len(), 4);
     /// ```
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+}
+
+/// Iterates over an Axiom's symbols.
+/// Borrows the [Axiom] for the iterators lifetime.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use lindenmayer_grammar::{Axiom, axiom};
+/// 
+/// // Create a new Axiom with a macro
+/// let axiom: Axiom<i32> = axiom!(0, 1, 0, 0, 1, 0, 1, 0);
+/// 
+/// // Count the difference in token count
+/// axiom.iter().fold(0, |diff, &t| diff + if t == 0 { -1 } else { 1 } );
+/// ```
+pub struct AxiomIterator<'a, A>(&'a Axiom<A>, Cell<usize>) where A: Alphabet;
+
+impl<'a, A> Iterator for AxiomIterator<'a, A> where A: Alphabet {
+    type Item = &'a A;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let item = self.0.0.get(self.1.get());
+
+        if item.is_none() { 
+            self.1.set(0); 
+        } else {
+            self.1.set(self.1.get() + 1);
+        }
+
+        item
+    }
+}
+
+impl<'a, A> Iterator for &AxiomIterator<'a, A> where A: Alphabet {
+    type Item = &'a A;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let item = self.0.0.get(self.1.get());
+
+        if item.is_none() { 
+            self.1.set(0); 
+        } else {
+            self.1.set(self.1.get() + 1);
+        }
+
+        item
+    }
+}
+
+impl<'a, A> AxiomIterator<'a, A> where A: Alphabet {
+    fn new(axiom: &'a Axiom<A>) -> Self {
+        Self(axiom, Cell::new(0))
     }
 }
 
@@ -268,7 +292,7 @@ impl<A> Axiom<A> where A: Alphabet {
 /// # Examples
 /// 
 /// ```
-/// use lindemayer_grammar::{Axiom, Ruleset, Production, production};
+/// use lindenmayer_grammar::{Axiom, Ruleset, Production, production};
 /// 
 /// let mut axiom = Axiom::from(0);
 /// 
@@ -282,7 +306,7 @@ impl<A> Axiom<A> where A: Alphabet {
 /// // Apply the Ruleset
 /// axiom.rewrite(&rules);
 /// ```
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Production<A: Alphabet> {
     matcher: Axiom<A>,
     transcriber: Axiom<A>
@@ -296,7 +320,7 @@ impl<A> Production<A> where A: Alphabet {
     /// # Examples
     /// 
     /// ```
-    /// use lindemayer_grammar::{Axiom, Production, production};
+    /// use lindenmayer_grammar::{Axiom, Production, production};
     /// 
     /// // Create two identical productions. The former uses the struct definition, the second uses a macro
     /// let p1 = Production::new(Axiom::from(0), Axiom::from(vec![0, 1]));
@@ -310,7 +334,7 @@ impl<A> Production<A> where A: Alphabet {
     }
 }
 
-impl<A> Debug for Production<A> where A: Alphabet {
+impl<A> Debug for Production<A> where A: Alphabet + Debug {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let matcher = format!("{:?}", &self.matcher).replace(',', " :");
         let transcriber = format!("{:?}", &self.transcriber).replace(',', " :");
@@ -331,14 +355,14 @@ impl<A> Debug for Production<A> where A: Alphabet {
 /// # Examples
 /// 
 /// ```
-/// use lindemayer_grammar::{Ruleset, rules, production};
+/// use lindenmayer_grammar::{Ruleset, rules, production};
 /// 
 /// // The following Ruleset initializations are equivalent
 /// let rs = rules!(0 => 0 : 1, 1 => 0);
 /// let rs = Ruleset::from(vec![production!(0 => 0 : 1), production!(1 => 0)]);
 /// ```
 #[derive(Clone)]
-pub struct Ruleset<A>(Vec<Production<A>>) where A: Alphabet;
+pub struct Ruleset<A>(BTreeSet<Production<A>>) where A: Alphabet;
 
 impl<A> Default for Ruleset<A> where A: Alphabet {
     fn default() -> Self {
@@ -348,17 +372,45 @@ impl<A> Default for Ruleset<A> where A: Alphabet {
 
 impl<A> From<Production<A>> for Ruleset<A> where A: Alphabet {
     fn from(rule: Production<A>) -> Self {
-        Self(vec![rule])
+        let mut ruleset = BTreeSet::new();
+
+        ruleset.insert(rule);
+
+        Self(ruleset)
     }
 }
 
 impl<A> From<Vec<Production<A>>> for Ruleset<A> where A: Alphabet {
     fn from(rules: Vec<Production<A>>) -> Self {
-        Self(rules)
+        let mut ruleset = BTreeSet::new();
+
+        for rule in rules.into_iter() {
+            ruleset.insert(rule);
+        }
+
+        Self(ruleset)
     }
 }
 
-impl<A> Debug for Ruleset<A> where A: Alphabet {
+impl<A> From<&[Production<A>]> for Ruleset<A> where A: Alphabet {
+    fn from(rules: &[Production<A>]) -> Self {
+        let mut ruleset = BTreeSet::new();
+
+        for rule in rules.iter().cloned() {
+            ruleset.insert(rule);
+        }
+
+        Self(ruleset)
+    }
+}
+
+impl<A> From<BTreeSet<Production<A>>> for Ruleset<A> where A: Alphabet {
+    fn from(rules: BTreeSet<Production<A>>) -> Self {
+        Ruleset(rules)
+    }
+}
+
+impl<A> Debug for Ruleset<A> where A: Alphabet + Debug {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut dbg_builder = f.debug_struct("Rules");
 
@@ -379,7 +431,7 @@ impl<A> Debug for Ruleset<A> where A: Alphabet {
 /// # Examples
 /// 
 /// ```
-/// use lindemayer_grammar::rules;
+/// use lindenmayer_grammar::rules;
 ///
 /// rules!(0 => 0 : 1, 1 => 0);
 /// ```
@@ -387,22 +439,26 @@ impl<A> Debug for Ruleset<A> where A: Alphabet {
 macro_rules! rules {
     ($($a:literal $(: $b:literal)* => $c:literal $(: $d:literal)*),+) => {
         {
-            use lindemayer_grammar::{production, Ruleset};
+            use std::collections::BTreeSet;
 
-            let mut rules = Vec::new();
-            $(rules.push(production!($a $(: $b)* => $c $(: $d)*));)+
+            use lindenmayer_grammar::{production, Ruleset};
+
+            let mut ruleset = BTreeSet::new();
+            $(ruleset.insert(production!($a $(: $b)* => $c $(: $d)*));)+
             
-            Ruleset::from(rules)
+            Ruleset::from(ruleset)
         }
     };
     ($($a:path $(: $b:path)* => $c:path $(: $d:path)*),+) => {
         {
-            use lindemayer_grammar::{production, Ruleset};
+            use std::collections::BTreeSet;
 
-            let mut rules = Vec::new();
-            $(rules.push(production!($a $(: $b)* => $c $(: $d)*));)+
+            use lindenmayer_grammar::{production, Ruleset};
+
+            let mut ruleset = BTreeSet::new();
+            $(ruleset.insert(production!($a $(: $b)* => $c $(: $d)*));)+
             
-            Ruleset::from(rules)
+            Ruleset::from(ruleset)
         }
     };
 }
@@ -416,7 +472,7 @@ macro_rules! rules {
 /// # Examples
 /// 
 /// ```
-/// use lindemayer_grammar::{Axiom, Production, production};
+/// use lindenmayer_grammar::{Axiom, Production, production};
 /// 
 /// production!(0 => 0 : 1);
 /// 
@@ -427,7 +483,7 @@ macro_rules! rules {
 macro_rules! production {
     ($a:literal $(: $b:literal)*) => {
         {
-            use lindemayer_grammar::{Axiom, Production};
+            use lindenmayer_grammar::{Axiom, Production};
         
             let mut matcher = vec![$a];
             $(matcher.push($b);)*
@@ -437,7 +493,7 @@ macro_rules! production {
     };
     ($a:literal $(: $b:literal)* => $c:literal $(: $d:literal)*) => {
         {
-            use lindemayer_grammar::{Axiom, Production};
+            use lindenmayer_grammar::{Axiom, Production};
 
             let mut matcher = vec![$a];
             $(matcher.push($b);)*
@@ -450,7 +506,7 @@ macro_rules! production {
     };
     ($a:path $(: $b:path)*) => {
         {
-            use lindemayer_grammar::{Axiom, Production};
+            use lindenmayer_grammar::{Axiom, Production};
         
             let mut matcher = vec![$a];
             $(matcher.push($b);)*
@@ -460,7 +516,7 @@ macro_rules! production {
     };
     ($a:path $(: $b:path)* => $c:path $(: $d:path)*) => {
         {
-            use lindemayer_grammar::{Axiom, Production};
+            use lindenmayer_grammar::{Axiom, Production};
 
             let mut matcher = vec![$a];
             $(matcher.push($b);)*
@@ -478,7 +534,7 @@ macro_rules! production {
 /// # Examples
 /// 
 /// ```
-/// use lindemayer_grammar::{Axiom, axiom};
+/// use lindenmayer_grammar::{Axiom, axiom};
 /// 
 /// axiom!(0, 1, 0);
 /// 
@@ -489,7 +545,7 @@ macro_rules! production {
 macro_rules! axiom {
     ($($a:literal),+) => {
         {
-            use lindemayer_grammar::{Axiom, Production};
+            use lindenmayer_grammar::{Axiom, Production};
 
             let mut elements = Vec::new();
             $(elements.push($a);)+
@@ -499,7 +555,7 @@ macro_rules! axiom {
     };
     ($($a:path),+) => {
         {
-            use lindemayer_grammar::{Axiom, Production};
+            use lindenmayer_grammar::{Axiom, Production};
 
             let mut elements = Vec::new();
             $(elements.push($a);)+

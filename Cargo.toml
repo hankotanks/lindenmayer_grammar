@@ -1,10 +1,10 @@
 [package]
-name = "lindemayer_grammar"
+name = "lindenmayer_grammar"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "lindemayer_grammar"
+name = "lindenmayer_grammar"
 path = "src/lib.rs"
 
 [[example]]
@@ -14,6 +14,22 @@ path = "examples/fractal_tree/main.rs"
 [[example]]
 name = "cantor_set"
 path = "examples/cantor_set/main.rs"
+
+[[example]]
+name = "koch_curve"
+path = "examples/koch_curve/main.rs"
+
+[[example]]
+name = "sierpinski_triangle"
+path = "examples/sierpinski_triangle/main.rs"
+
+[[example]]
+name = "dragon_curve"
+path = "examples/dragon_curve/main.rs"
+
+[[example]]
+name = "barnsley_fern"
+path = "examples/barnsley_fern/main.rs"
 
 [dev-dependencies]
 turtle = {git = "https://github.com/sunjay/turtle"}

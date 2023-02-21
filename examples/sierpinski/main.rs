@@ -6,6 +6,7 @@ use lindenmayer_grammar::{
     TurtleBuilder, 
     TurtleAction
 };
+use raqote::{StrokeStyle, LineCap};
 
 const DEPTH: i32 = 6;
 const FILE_NAME: &'static str = "sierpinski.png";
@@ -32,5 +33,11 @@ fn main() -> anyhow::Result<()> {
         .assign_action(3, Turn(ANGLE))
         .build();
 
-    axiom.visualize(turtle).save(RESOLUTION, FILE_NAME)
+    let style = StrokeStyle {
+        width: RESOLUTION * 0.2,
+        cap: LineCap::Butt,
+        ..Default::default()
+    };
+
+    axiom.visualize(turtle).save(RESOLUTION, &style, FILE_NAME)
 }

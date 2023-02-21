@@ -6,12 +6,13 @@ use lindenmayer_grammar::{
     TurtleBuilder, 
     TurtleAction
 };
+use raqote::{StrokeStyle, LineCap};
 
 const DEPTH: i32 = 5;
 const ANGLE_DEGREES: f32 = 20.0;
 const ANGLE_RADS: f32 = ANGLE_DEGREES * PI / 180.0;
 const FILE_NAME: &'static str = "fern.png";
-const RESOLUTION: f32 = 50.0;
+const RESOLUTION: f32 = 15.0;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum BarnsleyFernAlphabet { A, B, Left, Right, Open, Close } 
@@ -40,5 +41,11 @@ fn main() -> anyhow::Result<()> {
         .assign_action(Close, PopState)
         .build();
 
-    axiom.visualize(turtle).save(RESOLUTION, FILE_NAME)
+    let style = StrokeStyle {
+        width: RESOLUTION * 0.5,
+        cap: LineCap::Round,
+        ..Default::default()
+    };
+
+    axiom.visualize(turtle).save(RESOLUTION, &style, FILE_NAME)
 }

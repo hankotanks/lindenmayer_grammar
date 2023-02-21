@@ -598,7 +598,7 @@ impl Drawing {
         pb.finish()
     }
 
-    pub fn save(&self, resolution: f32, file_name: &str) -> anyhow::Result<()> {
+    pub fn save(&self, resolution: f32, style: &StrokeStyle, file_name: &str) -> anyhow::Result<()> {
         let width = ((2. + self.width as f32) * resolution) as i32;
         let height = ((2. + self.height as f32) * resolution) as i32;
 
@@ -608,7 +608,7 @@ impl Drawing {
         target.stroke(
             &self.build_path(resolution), 
             &Source::Solid(SolidSource::from_unpremultiplied_argb(0xFF, 0xFF, 0xFF, 0xFF)),
-            &StrokeStyle::default(),
+            style,
             &DrawOptions::new(),
         );
 

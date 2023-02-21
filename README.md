@@ -15,14 +15,11 @@ Axioms can be rewritten using a `Ruleset`, which is an ordered collection of ind
 The crate allows symbols to be mapped to the movement of a [turtle](https://en.wikipedia.org/wiki/Turtle_graphics).
 The resulting graphic can be displayed or saved as an image.
 
-| ![](/images/dragon_curve.png) | ![](/images/fern.png) |
+| ![](/images/koch.png) | ![](/images/fern.png) |
 |:---------------------:|:---------------------:|
 
-| ![](/images/sierpinski.png) | 
-|:---------------------:|
-
-| ![](/images/koch.png) |
-|:---------------------:|
+| ![](/images/dragon_curve.png) | ![](/images/sierpinski.png) |
+|:---------------------:|:---------------------:|
 
 ## Example
 

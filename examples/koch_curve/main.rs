@@ -1,41 +1,32 @@
-use lindenmayer_grammar::{Axiom, rules};
+use std::f32::consts::PI;
 
-use turtle::Drawing;
+use lindenmayer_grammar::{
+    Axiom, 
+    rules, 
+    TurtleBuilder, 
+    TurtleAction
+};
 
-const DEPTH: u32 = 5;
+const DEPTH: u32 = 4;
+const ANGLE: f32 = PI * 0.5;
+const FILE_NAME: &'static str = "koch.png";
+const RESOLUTION: f32 = 20.0;
 
-fn draw_koch_curve(axiom: &Axiom<i32>) {
-    let mut drawing = Drawing::new();
+fn main() -> anyhow::Result<()> {
+    let mut axiom = Axiom::new(0);
 
-    let size = drawing.size();
+    let rules = rules!(0 => 0 : 1 : 0 : 2 : 0 : 2 : 0 : 1 : 0);
 
-    drawing.set_center(((size.width as f64 / 2.), (size.height as f64 / 3.)));
-    drawing.set_title("Koch Curve");
-    
-    let dist = size.width as f64 / 3u32.pow(DEPTH) as f64;
-
-    let mut turtle = drawing.add_turtle();
-
-    turtle.set_speed("instant");
-    turtle.hide();
-    turtle.set_heading(0.);
-
-    for token in axiom.iter() {
-        match token {
-            0 => turtle.forward(dist),
-            1 => turtle.left(90.),
-            2 => turtle.right(90.),
-            _ => unreachable!()
-        }
+    for _ in 0..DEPTH { 
+        axiom.rewrite(&rules); 
     }
-}
 
-fn main() {
-    let mut axiom = Axiom::from(0);
+    use TurtleAction::*;
+    let turtle = TurtleBuilder::new()
+        .assign_action(0, Forward)
+        .assign_action(1, Turn(-ANGLE))
+        .assign_action(2, Turn(ANGLE))
+        .build();
 
-    let rules = rules!(0 => 0:1:0:2:0:2:0:1:0);
-
-    for _n in 0..DEPTH { axiom.rewrite(&rules); }
-
-    draw_koch_curve(&axiom);
+    axiom.visualize(turtle).save(RESOLUTION, FILE_NAME)
 }

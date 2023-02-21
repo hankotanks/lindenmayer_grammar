@@ -16,31 +16,36 @@
 //! #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 //! enum BFTAlphabet { Leaf, Node, Left, Right }
 //! 
-//! fn main() {
-//!     use BFTAlphabet::*;
-//! 
-//!     // The L-system initiator
-//!     let mut axiom = Axiom::from(Leaf);
-//! 
-//!     // Declare the system's productions with the rules! macro
-//!     let rules = rules!(
-//!         Node => Node : Node,
-//!         Leaf => Node : Left : Leaf : Right : Leaf
-//!     );
-//! 
-//!     // The axiom is rewritten using the defined rules, resulting in
-//!     // [Node, Left, Leaf, Right, Leaf]
-//!     axiom.rewrite(&rules); 
-//! }
+//! use BFTAlphabet::*;
+//!
+//! // The L-system initiator
+//! let mut axiom = Axiom::from(Leaf);
+//!
+//! // Declare the system's productions with the rules! macro
+//! let rules = rules!(
+//!     Node => Node : Node,
+//!     Leaf => Node : Left : Leaf : Right : Leaf
+//! );
+//!
+//! // The axiom is rewritten using the defined rules, resulting in
+//! // [Node, Left, Leaf, Right, Leaf]
+//! axiom.rewrite(&rules); 
+
 //! ```
 //! 
 //! [^a]: In this crate, any type which implements `Clone` and `Ord` is considered an Alphabet. Any integer type is ideal for this use case, but Enums can work too!
 
 use std::{
-    cell::Cell, 
     fmt::Debug, 
-    collections::BTreeSet
+    collections::{BTreeSet, BTreeMap, VecDeque}, 
+    vec::IntoIter, 
+    iter::once, 
+    slice::Iter
 };
+
+use ordered_float::OrderedFloat;
+use rand::{thread_rng, Rng};
+use raqote::{DrawTarget, PathBuilder, Source, SolidSource, StrokeStyle, DrawOptions, Path};
 
 /// An internal trait that is automatically implied for all types that can be used as valid alphabets.
 /// 
@@ -86,42 +91,49 @@ impl<T> Alphabet for T where T: Clone + Ord {  }
 pub struct Axiom<A>(Vec<A>) where A: Alphabet;
 
 impl<A> Axiom<A> where A: Alphabet {
-    pub fn size(&self) -> usize {
+    pub fn new(symbol: A) -> Self {
+        Self(vec![symbol])
+    }
+
+    pub fn with_elements<I: IntoIterator<Item = A>>(collection: I) -> Self {
+        Self(collection.into_iter().collect::<Vec<_>>())
+    }
+
+    pub fn iter(&self) -> Iter<A> {
+        self.0.iter()
+    }
+
+    /// Returns the length of the current [Axiom]
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use lindenmayer_grammar::Axiom;
+    /// 
+    /// assert_eq!(Axiom::from(vec![0, 1, 0, 1]).len(), 4);
+    /// ```
+    pub fn len(&self) -> usize {
         self.0.len()
     }
 
-    pub fn iter(&self) -> AxiomIterator<'_, A> {
-        AxiomIterator::new(self)
-    }
-}
-
-impl<A> From<A> for Axiom<A> where A: Alphabet {
-    fn from(token: A) -> Self {
-        Self(vec![token])
-    }
-}
-
-impl<A> From<Vec<A>> for Axiom<A> where A: Alphabet {
-    fn from(tokens: Vec<A>) -> Self {
-        Self(tokens)
-    }
-}
-
-impl<A> From<&[A]> for Axiom<A> where A: Alphabet {
-    fn from(tokens: &[A]) -> Self {
-        Self(tokens.to_vec())
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
 impl<A> Debug for Axiom<A> where A: Alphabet + Debug {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list().entries(self.iter()).finish()
+        f.debug_list().entries(self.0.iter()).finish()
     }
 }
 
-#[inline]
-fn matcher<A: Alphabet>(rule: &Production<A>, slice: &[A]) -> Option<usize> {
-    (1..=slice.len()).find(|&i| rule.matcher.0 == slice[0..i])
+impl<A> IntoIterator for Axiom<A> where A: Alphabet {
+    type Item = A;
+    type IntoIter = IntoIter<A>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
 }
 
 impl<A> Axiom<A> where A: Alphabet {
@@ -149,13 +161,18 @@ impl<A> Axiom<A> where A: Alphabet {
     /// ```
     pub fn step(&self, rules: &Ruleset<A>) -> Axiom<A> {
         let mut output: Vec<A> = Vec::new();
+
+        let mut prng = thread_rng();
     
         let mut pointer = 0;
         'token: while pointer < self.0.len() {
             for rule in rules.0.iter() {
-                if let Some(token_length) = matcher(rule, &self.0[pointer..]) {
+                if let Some(token_length) = rule.matcher(&self.0[pointer..]) {
+                    if prng.gen::<f32>() < rule.probability.0 {
+                        output.append(&mut rule.transcriber.0.clone());
+                    }
+
                     pointer += token_length;
-                    output.append(&mut rule.transcriber.0.clone());
                     
                     continue 'token;
                 }
@@ -164,7 +181,7 @@ impl<A> Axiom<A> where A: Alphabet {
             output.push(self.0[pointer].clone());
         }
     
-        output.into()
+        Self::with_elements(output)
     }
 
     /// Rewrites the [Axiom] using the given [Ruleset]
@@ -190,14 +207,18 @@ impl<A> Axiom<A> where A: Alphabet {
     pub fn rewrite(&mut self, rules: &Ruleset<A>) {
         let mut size = self.0.len() as i32;
 
+        let mut prng = thread_rng();
+
         let mut pointer = 0;
         'token: while (pointer as i32) < size {
             for rule in rules.0.iter() {
-                if let Some(token_length) = matcher(rule, &self.0[pointer..]) {
-                    self.0.drain(pointer..(pointer + token_length));
-                    rule.transcriber.0.iter().cloned().rev().for_each(|token| { 
-                        self.0.insert(pointer, token); 
-                    } );
+                if let Some(token_length) = rule.matcher(&self.0[pointer..]) {
+                    if prng.gen::<f32>() < rule.probability.0 {
+                        self.0.drain(pointer..(pointer + token_length));
+                        rule.transcriber.0.iter().cloned().rev().for_each(|token| { 
+                            self.0.insert(pointer, token); 
+                        } );
+                    }
 
                     pointer += rule.transcriber.0.len();
                     size += rule.transcriber.0.len() as i32 - token_length as i32;
@@ -210,71 +231,51 @@ impl<A> Axiom<A> where A: Alphabet {
         }
     }
 
-    /// Returns the length of the current [Axiom]
-    /// 
-    /// # Examples
-    /// 
-    /// ```
-    /// use lindenmayer_grammar::Axiom;
-    /// 
-    /// assert_eq!(Axiom::from(vec![0, 1, 0, 1]).len(), 4);
-    /// ```
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-}
+    pub fn visualize(&self, turtle: Turtle<A>) -> Drawing {
+        let mut state = VecDeque::new();
 
-/// Iterates over an Axiom's symbols.
-/// Borrows the [Axiom] for the iterators lifetime.
-/// 
-/// # Examples
-/// 
-/// ```
-/// use lindenmayer_grammar::{Axiom, axiom};
-/// 
-/// // Create a new Axiom with a macro
-/// let axiom: Axiom<i32> = axiom!(0, 1, 0, 0, 1, 0, 1, 0);
-/// 
-/// // Count the difference in token count
-/// axiom.iter().fold(0, |diff, &t| diff + if t == 0 { -1 } else { 1 } );
-/// ```
-pub struct AxiomIterator<'a, A>(&'a Axiom<A>, Cell<usize>) where A: Alphabet;
+        let mut minima = (0., 0.);
+        let mut maxima = (0., 0.);
 
-impl<'a, A> Iterator for AxiomIterator<'a, A> where A: Alphabet {
-    type Item = &'a A;
+        let mut actions = Vec::new();
 
-    fn next(&mut self) -> Option<Self::Item> {
-        let item = self.0.0.get(self.1.get());
+        let mut position = (0f32, 0f32);
+        let mut heading = 0f32;
 
-        if item.is_none() { 
-            self.1.set(0); 
-        } else {
-            self.1.set(self.1.get() + 1);
+        use TurtleAction::*;
+        for symbol in self.iter() {
+            for action in turtle.0.get(symbol).unwrap_or(&Vec::new()) {
+                actions.push(*action);
+
+                match action {
+                    Forward => {
+                        position.0 += heading.cos();
+                        position.1 += heading.sin(); 
+                    },
+                    Backward => { 
+                        position.0 -= heading.cos();
+                        position.1 -= heading.sin(); 
+                    },
+                    Turn(rad) => { 
+                        heading += rad; 
+                    },
+                    PushState => { 
+                        state.push_front((position, heading)); 
+                    },
+                    PopState => { 
+                        (position, heading) = state.pop_front().unwrap(); 
+                    },
+                    _ => {  }
+                }
+
+                minima.0 = position.0.min(minima.0);
+                minima.1 = position.1.min(minima.1);
+                maxima.0 = position.0.max(maxima.0);
+                maxima.1 = position.1.max(maxima.1);
+            }
         }
 
-        item
-    }
-}
-
-impl<'a, A> Iterator for &AxiomIterator<'a, A> where A: Alphabet {
-    type Item = &'a A;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let item = self.0.0.get(self.1.get());
-
-        if item.is_none() { 
-            self.1.set(0); 
-        } else {
-            self.1.set(self.1.get() + 1);
-        }
-
-        item
-    }
-}
-
-impl<'a, A> AxiomIterator<'a, A> where A: Alphabet {
-    fn new(axiom: &'a Axiom<A>) -> Self {
-        Self(axiom, Cell::new(0))
+        Drawing::new((maxima.0 - minima.0) as i32, (maxima.1 - minima.1) as i32, (minima.0.abs(), minima.1.abs()), actions)
     }
 }
 
@@ -309,7 +310,8 @@ impl<'a, A> AxiomIterator<'a, A> where A: Alphabet {
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Production<A: Alphabet> {
     matcher: Axiom<A>,
-    transcriber: Axiom<A>
+    transcriber: Axiom<A>,
+    probability: OrderedFloat<f32>
 }
 
 impl<A> Production<A> where A: Alphabet {
@@ -329,8 +331,12 @@ impl<A> Production<A> where A: Alphabet {
     /// // The two productions are equal
     /// assert_eq!(p1, p2);
     /// ```
-    pub fn new(matcher: Axiom<A>, transcriber: Axiom<A>) -> Self {
-        Self { matcher, transcriber }
+    pub fn new(matcher: Axiom<A>, transcriber: Axiom<A>, probability: f32) -> Self {
+        Self { matcher, transcriber, probability: OrderedFloat(probability) }
+    }
+
+    fn matcher(&self, slice: &[A]) -> Option<usize> {
+        (1..=slice.len()).find(|&i| self.matcher.0 == slice[0..i])
     }
 }
 
@@ -364,49 +370,15 @@ impl<A> Debug for Production<A> where A: Alphabet + Debug {
 #[derive(Clone)]
 pub struct Ruleset<A>(BTreeSet<Production<A>>) where A: Alphabet;
 
-impl<A> Default for Ruleset<A> where A: Alphabet {
-    fn default() -> Self {
-        Self(Default::default())
-    }
-}
-
 impl<A> From<Production<A>> for Ruleset<A> where A: Alphabet {
     fn from(rule: Production<A>) -> Self {
-        let mut ruleset = BTreeSet::new();
-
-        ruleset.insert(rule);
-
-        Self(ruleset)
+        Self(BTreeSet::from_iter(once(rule)))
     }
 }
 
-impl<A> From<Vec<Production<A>>> for Ruleset<A> where A: Alphabet {
-    fn from(rules: Vec<Production<A>>) -> Self {
-        let mut ruleset = BTreeSet::new();
-
-        for rule in rules.into_iter() {
-            ruleset.insert(rule);
-        }
-
-        Self(ruleset)
-    }
-}
-
-impl<A> From<&[Production<A>]> for Ruleset<A> where A: Alphabet {
-    fn from(rules: &[Production<A>]) -> Self {
-        let mut ruleset = BTreeSet::new();
-
-        for rule in rules.iter().cloned() {
-            ruleset.insert(rule);
-        }
-
-        Self(ruleset)
-    }
-}
-
-impl<A> From<BTreeSet<Production<A>>> for Ruleset<A> where A: Alphabet {
-    fn from(rules: BTreeSet<Production<A>>) -> Self {
-        Ruleset(rules)
+impl<A, I> From<I> for Ruleset<A> where A: Alphabet, I: IntoIterator<Item = Production<A>> {
+    fn from(rules: I) -> Self {
+        Self(BTreeSet::from_iter(rules.into_iter()))
     }
 }
 
@@ -437,26 +409,26 @@ impl<A> Debug for Ruleset<A> where A: Alphabet + Debug {
 /// ```
 #[macro_export]
 macro_rules! rules {
-    ($($a:literal $(: $b:literal)* => $c:literal $(: $d:literal)*),+) => {
+    ($($a:literal $(: $b:literal)* $([$p:literal])? => $c:literal $(: $d:literal)*),+) => {
         {
             use std::collections::BTreeSet;
 
             use lindenmayer_grammar::{production, Ruleset};
 
             let mut ruleset = BTreeSet::new();
-            $(ruleset.insert(production!($a $(: $b)* => $c $(: $d)*));)+
+            $(ruleset.insert(production!($a $(: $b)* $([$p])? => $c $(: $d)*));)+
             
             Ruleset::from(ruleset)
         }
     };
-    ($($a:path $(: $b:path)* => $c:path $(: $d:path)*),+) => {
+    ($($a:path $(: $b:path)* $([$p:literal])? => $c:path $(: $d:path)*),+) => {
         {
             use std::collections::BTreeSet;
 
             use lindenmayer_grammar::{production, Ruleset};
 
             let mut ruleset = BTreeSet::new();
-            $(ruleset.insert(production!($a $(: $b)* => $c $(: $d)*));)+
+            $(ruleset.insert(production!($a $(: $b)* $([$p])? => $c $(: $d)*));)+
             
             Ruleset::from(ruleset)
         }
@@ -481,17 +453,7 @@ macro_rules! rules {
 /// ```
 #[macro_export]
 macro_rules! production {
-    ($a:literal $(: $b:literal)*) => {
-        {
-            use lindenmayer_grammar::{Axiom, Production};
-        
-            let mut matcher = vec![$a];
-            $(matcher.push($b);)*
-    
-            Production::new(Axiom::from(matcher.clone()), Axiom::from(matcher))
-        }
-    };
-    ($a:literal $(: $b:literal)* => $c:literal $(: $d:literal)*) => {
+    ($a:literal $(: $b:literal)* $([$p:literal])? => $c:literal $(: $d:literal)*) => {
         {
             use lindenmayer_grammar::{Axiom, Production};
 
@@ -501,20 +463,13 @@ macro_rules! production {
             let mut transcriber = vec![$c];
             $(transcriber.push($d);)*
 
-            Production::new(Axiom::from(matcher), Axiom::from(transcriber))
+            let mut probability = 1.0;
+            $(probability = $p;)?
+
+            Production::new(Axiom::with_elements(matcher), Axiom::with_elements(transcriber), probability)
         }
     };
-    ($a:path $(: $b:path)*) => {
-        {
-            use lindenmayer_grammar::{Axiom, Production};
-        
-            let mut matcher = vec![$a];
-            $(matcher.push($b);)*
-    
-            Production::new(Axiom::from(matcher.clone()), Axiom::from(matcher))
-        }
-    };
-    ($a:path $(: $b:path)* => $c:path $(: $d:path)*) => {
+    ($a:path $(: $b:path)* $([$p:literal])? => $c:path $(: $d:path)*) => {
         {
             use lindenmayer_grammar::{Axiom, Production};
 
@@ -524,43 +479,141 @@ macro_rules! production {
             let mut transcriber = vec![$c];
             $(transcriber.push($d);)*
 
-            Production::new(Axiom::from(matcher), Axiom::from(transcriber))
+            let mut probability = 1.0;
+            $(probability = $p;)?
+
+            Production::new(Axiom::with_elements(matcher), Axiom::with_elements(transcriber), probability)
         }
     };
 }
 
-/// Analagous to `Axiom::from()`, but does not require the instantiation of an intermediate Vec.
-/// 
-/// # Examples
-/// 
-/// ```
-/// use lindenmayer_grammar::{Axiom, axiom};
-/// 
-/// axiom!(0, 1, 0);
-/// 
-/// // This is equivalent to...
-/// Axiom::from(vec![0, 1, 0]);
-/// ```
-#[macro_export]
-macro_rules! axiom {
-    ($($a:literal),+) => {
-        {
-            use lindenmayer_grammar::{Axiom, Production};
+#[derive(Clone)]
+pub struct Turtle<A>(BTreeMap<A, Vec<TurtleAction>>) where A: Alphabet;
 
-            let mut elements = Vec::new();
-            $(elements.push($a);)+
+#[derive(Clone, Copy)]
+pub enum TurtleAction {
+    Forward,
+    Backward,
+    Turn(f32),
+    PushState,
+    PopState,
+    PenUp,
+    PenDown
+}
 
-            Axiom::from(elements)
+#[derive(Clone)]
+pub struct TurtleBuilder<A>(BTreeMap<A, Vec<TurtleAction>>) where A: Alphabet;
+
+impl<A> Default for TurtleBuilder<A> where A: Alphabet {
+    fn default() -> Self {
+        Self(BTreeMap::new())
+    }
+}
+
+impl<A> TurtleBuilder<A> where A: Alphabet {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn build(self) -> Turtle<A> {
+        Turtle(self.0)
+    }
+
+    pub fn assign_action(mut self, symbol: A, action: TurtleAction) -> Self {
+        self.0.insert(symbol, vec![action]);
+        self
+    }
+
+    pub fn assign_action_set<I: IntoIterator<Item = TurtleAction>>(mut self, symbol: A, actions: I) -> Self {
+        self.0.insert(symbol, actions.into_iter().collect::<Vec<_>>());
+        self
+    }
+}
+
+pub struct Drawing {
+    width: i32,
+    height: i32,
+    origin: (f32, f32),
+    actions: Vec<TurtleAction>
+}
+
+impl Drawing {
+    pub fn new(width: i32, height: i32, origin: (f32, f32), actions: Vec<TurtleAction>) -> Self {
+        Self {
+            width,
+            height,
+            origin, 
+            actions
         }
-    };
-    ($($a:path),+) => {
-        {
-            use lindenmayer_grammar::{Axiom, Production};
+    }
 
-            let mut elements = Vec::new();
-            $(elements.push($a);)+
+    fn build_path(&self, resolution: f32) -> Path {
+        let mut position = (self.origin.0 * resolution + resolution, self.origin.1 * resolution + resolution);
+        let mut heading = 0f32;
+        let mut active = true;
 
-            Axiom::from(elements)
+        let mut pb = PathBuilder::new();
+        pb.move_to(position.0, position.1);
+
+        let mut state = VecDeque::new();
+
+        use TurtleAction::*;
+        for action in self.actions.iter() {
+            match action {
+                Forward => {
+                    position.0 += heading.cos() * resolution;
+                    position.1 += heading.sin() * resolution; 
+
+                    if active {
+                        pb.line_to(position.0, position.1);
+                    } else {
+                        pb.move_to(position.0, position.1);
+                    }
+                },
+                Backward => {
+                    position.0 -= heading.cos() * resolution;
+                    position.1 -= heading.sin() * resolution; 
+                    
+                    if active {
+                        pb.line_to(position.0, position.1);
+                    } else {
+                        pb.move_to(position.0, position.1);
+                    }
+                },
+                Turn(rad) => {
+                    heading += rad;
+                },
+                PushState => {
+                    state.push_front((position, heading));
+                },
+                PopState => {
+                    (position, heading) = state.pop_front().unwrap();
+                    pb.move_to(position.0, position.1);
+                },
+                PenUp => { active = false; },
+                PenDown => { active = true; },
+            }
         }
-    };
+
+        pb.finish()
+    }
+
+    pub fn save(&self, resolution: f32, file_name: &str) -> anyhow::Result<()> {
+        let width = ((2. + self.width as f32) * resolution) as i32;
+        let height = ((2. + self.height as f32) * resolution) as i32;
+
+        let mut target = DrawTarget::new(width, height);
+
+        target.clear(SolidSource::from_unpremultiplied_argb(0xFF, 0, 0, 0));
+        target.stroke(
+            &self.build_path(resolution), 
+            &Source::Solid(SolidSource::from_unpremultiplied_argb(0xFF, 0xFF, 0xFF, 0xFF)),
+            &StrokeStyle::default(),
+            &DrawOptions::new(),
+        );
+
+        target.write_png(file_name)?;
+
+        Ok(())
+    }
 }

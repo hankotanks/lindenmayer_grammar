@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::f32::consts::TAU;
 
 use lindenmayer_grammar::{
     Axiom, 
@@ -7,17 +7,17 @@ use lindenmayer_grammar::{
     TurtleAction
 };
 
-const DEPTH: i32 = 10;
-const ANGLE: f32 = PI * 0.5;
-const FILE_NAME: &'static str = "dragon_curve.png";
+const DEPTH: i32 = 6;
+const FILE_NAME: &'static str = "sierpinski.png";
+const ANGLE: f32 = TAU / 3.0;
 const RESOLUTION: f32 = 20.0;
 
 fn main() -> anyhow::Result<()> {
-    let mut axiom = Axiom::new(0);
+    let mut axiom = Axiom::with_elements([0, 3, 1, 3, 1]);
 
     let rules = rules!(
-        0 => 0 : 2 : 1,
-        1 => 0 : 3 : 1
+        0 => 0 : 3 : 1 : 2 : 0 : 2 : 1 : 3 : 0,
+        1 => 1 : 1
     );
 
     for _ in 0..DEPTH { 

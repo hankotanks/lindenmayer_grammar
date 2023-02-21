@@ -1,65 +1,60 @@
 # Lindenmayer Grammar
 
-A minimal implementation of the Lindenmayer grammar using Enum alphabets.
+A minimal implementation of the Lindenmayer formal grammar.
 
-## The Alphabet
+## Concept
 
-The basic unit of an L-system is its alphabet. 
-The *Alphabet* trait describes any appropriate type and is automatically implied for all types that implement `Clone` and `Ord`.
+Many other L-system crates I've found have treated the L-System itself as a type.
+To me, this approach obscured what was actually happening and felt like overkill.
+
+This crate showcases my approach.
+It supports stochastic and context sensitive rules.
+
+Axioms are the strings that substitution is performed on, and are composed of symbols from a single `Alphabet` (a type that implments `Clone` and `Ord`).
+Axioms can be rewritten using a `Ruleset`, which is an ordered collection of individual `Production` rules.
+The crate allows symbols to be mapped to the movement of a [turtle](https://en.wikipedia.org/wiki/Turtle_graphics).
+The resulting graphic can be displayed or saved as an image.
+
+| ![](/images/dragon_curve.png) | ![](/images/fern.png) |
+|:---------------------:|:---------------------:|
+
+| ![](/images/sierpinski.png) | 
+|:---------------------:|
+
+| ![](/images/koch.png) |
+|:---------------------:|
+
+## Example
 
 ```
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum FractalTreeAlphabet { Leaf, Node, Left, Right }
-```
 
-## Axioms
+use FractalTreeAlphabet::*;
 
-An *Axiom* is a sentence of symbols from a single alphabet.
+// Create an axiom from a single symbol
+let mut axiom = Axiom::new(Leaf);
 
-```
-// Creating an axiom from a collection of symbols
-use FractalTreeAlphabet::*
-let axiom = Axiom::from(vec![Node, Left, Leaf, Right, Leaf]);
-
-// ...or from a single symbol
-let mut axiom = Axiom::from(Leaf);
-```
-
-## Productions & Rulesets
-
-Axioms can be rewritten using a *Ruleset*, which itself is a number of *Production* rules.
-
-```
-// Defining productions using a macro
-let p1 = production!(Node => Node : Node);
-let p2 = production!(Leaf => Node : Left : Leaf : Right : Leaf);
-
-// Building the Ruleset...
-let rules = Ruleset::from(vec![p1, p2]);
-
-// ...or use the provided macro to directly initialize the Ruleset
+// Define the ruleset for creating a fractal tree
 let rules = rules!(
     Node => Node : Node, 
     Leaf => Node : Left : Leaf : Right : Leaf
 );
 
-// Rewrite the Axiom using the Ruleset
-axiom.rewrite(&rules); // dbg: [Node, Left, Leaf, Right, Leaf]
+// Rewrite the axiom 6 times
+for _ in 0..6 { 
+    axiom.rewrite(&rules); 
+}
+
+// Build a turtle using the TurtleBuilder type
+use TurtleAction::*;
+let turtle = TurtleBuilder::new()
+    .assign_action_set(Leaf, [Forward, PenUp, Backward, PenDown])
+    .assign_action(Node, Forward)
+    .assign_action_set(Left, [PushState, Turn(-PI * 0.25)])
+    .assign_action_set(Right, [PopState, Turn(PI * 0.25)])
+    .build();
+
+// Last, draw the L-System's state and save to "fractal_tree.png"
+axiom.visualize(turtle).save(1.0, "fractal_tree.png).unwrap();
 ```
-
----
-
-### Accessing Axiom Data
-
-Although the internal structure of axioms are not available, axioms can be made into iterators. 
-The axiom is borrowed for the lifetime of the iterator.
-
-```
-// Count number of Leaf symbols in the Axiom
-axiom.iter().fold(0, |count, s| count + matches!(s, Leaf) as u8);
-```
-
-All given examples use the [`turtle`](https://turtle.rs/) crate to easily visualize the results of L-system expansion.
-
-I determined that drawing functionality was outside the scope of this crate. 
-Check out the [`dcc-lsystem`](https://crates.io/crates/dcc-lsystem) crate by Robert Usher for a more in-depth implementation that allows axioms to be mapped directly to turtle commands.

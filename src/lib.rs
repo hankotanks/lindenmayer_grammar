@@ -44,9 +44,28 @@ use std::{
 };
 
 use ordered_float::OrderedFloat;
-use rand::{thread_rng, Rng};
-use raqote::{DrawTarget, PathBuilder, Source, SolidSource, StrokeStyle, DrawOptions, Path};
-use show_image::{Image, context, WindowProxy};
+
+use rand::{
+    thread_rng, 
+    Rng
+};
+
+use raqote::{
+    DrawTarget, 
+    PathBuilder, 
+    Source, 
+    SolidSource, 
+    StrokeStyle, 
+    DrawOptions, 
+    Path
+};
+
+use show_image::{
+    Image, 
+    context, 
+    WindowProxy, 
+    WindowOptions
+};
 
 /// An internal trait that is automatically implied for all types that can be used as valid alphabets.
 /// 
@@ -163,13 +182,11 @@ impl<A> Axiom<A> where A: Alphabet {
     pub fn step(&self, rules: &Ruleset<A>) -> Axiom<A> {
         let mut output: Vec<A> = Vec::new();
 
-        let mut prng = thread_rng();
-    
         let mut pointer = 0;
         'token: while pointer < self.0.len() {
             for rule in rules.0.iter() {
                 if let Some(token_length) = rule.matcher(&self.0[pointer..]) {
-                    if prng.gen::<f32>() < rule.probability.0 {
+                    if thread_rng().gen::<f32>() < rule.probability.0 {
                         output.append(&mut rule.transcriber.0.clone());
                     }
 
@@ -208,13 +225,11 @@ impl<A> Axiom<A> where A: Alphabet {
     pub fn rewrite(&mut self, rules: &Ruleset<A>) {
         let mut size = self.0.len() as i32;
 
-        let mut prng = thread_rng();
-
         let mut pointer = 0;
         'token: while (pointer as i32) < size {
             for rule in rules.0.iter() {
                 if let Some(token_length) = rule.matcher(&self.0[pointer..]) {
-                    if prng.gen::<f32>() < rule.probability.0 {
+                    if thread_rng().gen::<f32>() < rule.probability.0 {
                         self.0.drain(pointer..(pointer + token_length));
                         rule.transcriber.0.iter().cloned().rev().for_each(|token| { 
                             self.0.insert(pointer, token); 
@@ -222,6 +237,7 @@ impl<A> Axiom<A> where A: Alphabet {
                     }
 
                     pointer += rule.transcriber.0.len();
+
                     size += rule.transcriber.0.len() as i32 - token_length as i32;
                     
                     continue 'token;
@@ -548,12 +564,17 @@ impl Drawing {
         }
     }
 
-    fn build_path(&self, resolution: f32) -> Path {
-        let mut position = (self.origin.0 * resolution + resolution, self.origin.1 * resolution + resolution);
+    fn build_path(&self, resolution: f32, offset: (f32, f32)) -> Path {
+        let offset_x = offset.0 + resolution * 0.5;
+        let offset_y = offset.1 + resolution * 0.5;
+
         let mut heading = 0f32;
         let mut active = true;
 
+        let mut position = (self.origin.0 * resolution + offset_x, self.origin.1 * resolution + offset_y);
+
         let mut pb = PathBuilder::new();
+
         pb.move_to(position.0, position.1);
 
         let mut state = VecDeque::new();
@@ -561,6 +582,12 @@ impl Drawing {
         use TurtleAction::*;
         for action in self.actions.iter() {
             match action {
+                PenUp => { 
+                    active = false; 
+                },
+                PenDown => { 
+                    active = true; 
+                },
                 Forward => {
                     position.0 += heading.cos() * resolution;
                     position.1 += heading.sin() * resolution; 
@@ -590,24 +617,33 @@ impl Drawing {
                 PopState => {
                     (position, heading) = state.pop_front().unwrap();
                     pb.move_to(position.0, position.1);
-                },
-                PenUp => { active = false; },
-                PenDown => { active = true; },
+                }
             }
         }
 
         pb.finish()
     }
 
-    fn build_draw_target(&self, resolution: f32, style: &StrokeStyle) -> DrawTarget {
-        let width = ((2. + self.width as f32) * resolution) as i32;
-        let height = ((2. + self.height as f32) * resolution) as i32;
+    fn build_draw_target(&self, size: [u32; 2], style: &StrokeStyle) -> DrawTarget {
+        let pen = style.width.ceil();
+        
+        let target_width = size[0] as i32 + pen as i32;
+        let target_height = size[1] as i32 + pen as i32;
+        
+        let mut target = DrawTarget::new(target_width, target_height);
 
-        let mut target = DrawTarget::new(width, height);
+        let resolution = if self.width > self.height {
+            size[0] as f32 / (self.width + 2) as f32
+        } else {
+            size[1] as f32 / (self.height + 2) as f32
+        };
+
+        let offset_x = (size[0] as f32 - resolution * (self.width + 2) as f32) / 2.0 + pen;
+        let offset_y = (size[1] as f32 - resolution * (self.height + 2) as f32) / 2.0 + pen;
 
         target.clear(SolidSource::from_unpremultiplied_argb(0xFF, 0, 0, 0));
         target.stroke(
-            &self.build_path(resolution), 
+            &self.build_path(resolution, (offset_x, offset_y)),
             &Source::Solid(SolidSource::from_unpremultiplied_argb(0xFF, 0xFF, 0xFF, 0xFF)),
             style,
             &DrawOptions::new(),
@@ -616,24 +652,32 @@ impl Drawing {
         target
     }
 
-    pub fn save(&self, resolution: f32, style: &StrokeStyle, file_name: &str) -> anyhow::Result<()> {
-        self.build_draw_target(resolution, style).write_png(file_name)?;
+    pub fn show(&self, size: [u32; 2], style: &StrokeStyle) -> anyhow::Result<()> {
+        let draw_target = self.build_draw_target(size, style);
+
+        let image: Image = draw_target.into();
+
+        let window_options = WindowOptions {
+            size: Some(size),
+            ..Default::default()
+        };
+
+        let window = context().run_function_wait(
+            move |context| -> anyhow::Result<WindowProxy> {
+                let mut window = context.create_window("image", window_options)?;
+                window.set_image("image", &image.as_image_view()?);
+
+                Ok(window.proxy())
+            }
+        )?;
+
+        window.wait_until_destroyed()?;
 
         Ok(())
     }
 
-    pub fn show(&self, resolution: f32, style: &StrokeStyle) -> anyhow::Result<()> {
-        let draw_target = self.build_draw_target(resolution, style);
-
-        let image: Image = draw_target.into();
-
-        let window = context().run_function_wait(move |context| -> anyhow::Result<WindowProxy> {
-            let mut window = context.create_window("image", Default::default())?;
-            window.set_image("mondriaan", &image.as_image_view()?);
-            Ok(window.proxy())
-        })?;
-
-        window.wait_until_destroyed()?;
+    pub fn save(&self, size: [u32; 2], style: &StrokeStyle, file_name: &str) -> anyhow::Result<()> {
+        self.build_draw_target(size, style).write_png(file_name)?;
 
         Ok(())
     }

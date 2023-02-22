@@ -6,13 +6,14 @@ use lindenmayer_grammar::{
     TurtleBuilder, 
     TurtleAction
 };
-use raqote::{StrokeStyle, LineCap};
 
-const DEPTH: u32 = 4;
+use raqote::StrokeStyle;
+
+const DEPTH: u32 = 5;
+
 const ANGLE: f32 = PI * 0.5;
-const FILE_NAME: &'static str = "koch.png";
-const RESOLUTION: f32 = 20.0;
 
+#[show_image::main]
 fn main() -> anyhow::Result<()> {
     let mut axiom = Axiom::new(0);
 
@@ -29,11 +30,5 @@ fn main() -> anyhow::Result<()> {
         .assign_action(2, Turn(ANGLE))
         .build();
 
-    let style = StrokeStyle {
-        width: RESOLUTION * 0.5,
-        cap: LineCap::Butt,
-        ..Default::default()
-    };
-
-    axiom.visualize(turtle).save(RESOLUTION, &style, FILE_NAME)
+    axiom.visualize(turtle).show([1200, 620], &StrokeStyle::default())
 }

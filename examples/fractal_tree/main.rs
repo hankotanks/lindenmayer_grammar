@@ -6,16 +6,17 @@ use lindenmayer_grammar::{
     TurtleBuilder, 
     TurtleAction
 };
-use raqote::{StrokeStyle, LineCap};
 
-const DEPTH: i32 = 7;
+use raqote::StrokeStyle;
+
+const DEPTH: i32 = 8;
+
 const ANGLE: f32 = PI * 0.25;
-const FILE_NAME: &'static str = "fractal_tree.png";
-const RESOLUTION: f32 = 2.0;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum FractalTreeAlphabet { Leaf, Node, Left, Right }
 
+#[show_image::main]
 fn main() -> anyhow::Result<()> {
     use FractalTreeAlphabet::*;
 
@@ -38,11 +39,5 @@ fn main() -> anyhow::Result<()> {
         .assign_action_set(Right, [PopState, Turn(ANGLE)])
         .build();
 
-    let style = StrokeStyle {
-        width: RESOLUTION * 0.5,
-        cap: LineCap::Butt,
-        ..Default::default()
-    };
-
-    axiom.visualize(turtle).save(RESOLUTION, &style, FILE_NAME)
+    axiom.visualize(turtle).show([650, 600], &StrokeStyle::default())
 }

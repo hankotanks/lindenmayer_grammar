@@ -6,12 +6,16 @@ use lindenmayer_grammar::{
     TurtleBuilder, 
     TurtleAction
 };
-use raqote::{StrokeStyle, LineCap};
+
+use raqote::{
+    StrokeStyle, 
+    LineCap
+};
 
 const DEPTH: i32 = 10;
+
 const ANGLE: f32 = PI * 0.5;
-const FILE_NAME: &'static str = "dragon_curve.png";
-const RESOLUTION: f32 = 20.0;
+
 
 fn main() -> anyhow::Result<()> {
     let mut axiom = Axiom::new(0);
@@ -34,10 +38,10 @@ fn main() -> anyhow::Result<()> {
         .build();
 
     let style = StrokeStyle {
-        width: RESOLUTION * 0.5,
+        width: 3.0,
         cap: LineCap::Butt,
         ..Default::default()
     };
 
-    axiom.visualize(turtle).save(RESOLUTION, &style, FILE_NAME)
+    axiom.visualize(turtle).show([600, 650], &style)
 }

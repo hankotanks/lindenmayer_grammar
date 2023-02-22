@@ -6,13 +6,16 @@ use lindenmayer_grammar::{
     TurtleBuilder, 
     TurtleAction
 };
-use raqote::{StrokeStyle, LineCap};
 
+use raqote::StrokeStyle;
+
+// The number of times to rewrite the axiom
 const DEPTH: i32 = 6;
-const FILE_NAME: &'static str = "sierpinski.png";
-const ANGLE: f32 = TAU / 3.0;
-const RESOLUTION: f32 = 20.0;
 
+// The angle to turn by
+const ANGLE: f32 = TAU / 3.0;
+
+#[show_image::main]
 fn main() -> anyhow::Result<()> {
     let mut axiom = Axiom::with_elements([0, 3, 1, 3, 1]);
 
@@ -33,11 +36,5 @@ fn main() -> anyhow::Result<()> {
         .assign_action(3, Turn(ANGLE))
         .build();
 
-    let style = StrokeStyle {
-        width: RESOLUTION * 0.2,
-        cap: LineCap::Butt,
-        ..Default::default()
-    };
-
-    axiom.visualize(turtle).save(RESOLUTION, &style, FILE_NAME)
+    axiom.visualize(turtle).show([900, 800], &StrokeStyle::default())
 }

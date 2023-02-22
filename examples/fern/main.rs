@@ -17,6 +17,7 @@ const RESOLUTION: f32 = 15.0;
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum BarnsleyFernAlphabet { A, B, Left, Right, Open, Close } 
 
+#[show_image::main]
 fn main() -> anyhow::Result<()> {
     use BarnsleyFernAlphabet::*;
     
@@ -47,5 +48,7 @@ fn main() -> anyhow::Result<()> {
         ..Default::default()
     };
 
-    axiom.visualize(turtle).save(RESOLUTION, &style, FILE_NAME)
+    // axiom.visualize(turtle).save(RESOLUTION, &style, FILE_NAME)
+
+    axiom.visualize(turtle).show(RESOLUTION, &style)
 }

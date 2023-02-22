@@ -8,6 +8,7 @@ raqote = "0.8.2"
 rand = "0.8.5"
 ordered-float = "3.4.0"
 anyhow = "1.0.69"
+show-image = { version = "*", features = ["raqote"] }
 
 [lib]
 name = "lindenmayer_grammar"

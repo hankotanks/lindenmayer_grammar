@@ -46,6 +46,7 @@ use std::{
 use ordered_float::OrderedFloat;
 use rand::{thread_rng, Rng};
 use raqote::{DrawTarget, PathBuilder, Source, SolidSource, StrokeStyle, DrawOptions, Path};
+use show_image::{Image, context, WindowProxy};
 
 /// An internal trait that is automatically implied for all types that can be used as valid alphabets.
 /// 
@@ -598,7 +599,7 @@ impl Drawing {
         pb.finish()
     }
 
-    pub fn save(&self, resolution: f32, style: &StrokeStyle, file_name: &str) -> anyhow::Result<()> {
+    fn build_draw_target(&self, resolution: f32, style: &StrokeStyle) -> DrawTarget {
         let width = ((2. + self.width as f32) * resolution) as i32;
         let height = ((2. + self.height as f32) * resolution) as i32;
 
@@ -612,7 +613,27 @@ impl Drawing {
             &DrawOptions::new(),
         );
 
-        target.write_png(file_name)?;
+        target
+    }
+
+    pub fn save(&self, resolution: f32, style: &StrokeStyle, file_name: &str) -> anyhow::Result<()> {
+        self.build_draw_target(resolution, style).write_png(file_name)?;
+
+        Ok(())
+    }
+
+    pub fn show(&self, resolution: f32, style: &StrokeStyle) -> anyhow::Result<()> {
+        let draw_target = self.build_draw_target(resolution, style);
+
+        let image: Image = draw_target.into();
+
+        let window = context().run_function_wait(move |context| -> anyhow::Result<WindowProxy> {
+            let mut window = context.create_window("image", Default::default())?;
+            window.set_image("mondriaan", &image.as_image_view()?);
+            Ok(window.proxy())
+        })?;
+
+        window.wait_until_destroyed()?;
 
         Ok(())
     }

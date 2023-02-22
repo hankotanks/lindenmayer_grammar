@@ -10,7 +10,7 @@ To me, this approach obscured what was actually happening and felt like overkill
 This crate showcases my approach.
 It supports stochastic and context sensitive rules.
 
-Axioms are the strings that substitution is performed on, and are composed of symbols from a single `Alphabet` (a type that implments `Clone` and `Ord`).
+Axioms are the strings that substitution is performed on, and are composed of symbols from a single `Alphabet` (a type that implements `Clone` and `Ord`).
 Axioms can be rewritten using a `Ruleset`, which is an ordered collection of individual `Production` rules.
 The crate allows symbols to be mapped to the movement of a [turtle](https://en.wikipedia.org/wiki/Turtle_graphics).
 The resulting graphic can be displayed or saved as an image.
@@ -53,5 +53,5 @@ let turtle = TurtleBuilder::new()
     .build();
 
 // Last, draw the L-System's state and save to "fractal_tree.png"
-axiom.visualize(turtle).save(1.0, "fractal_tree.png).unwrap();
+axiom.visualize(turtle).save([650, 600], "fractal_tree.png).unwrap();
 ```

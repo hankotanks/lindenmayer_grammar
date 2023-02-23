@@ -7,15 +7,20 @@ use lindenmayer_grammar::{
     TurtleAction
 };
 
+use rand::{thread_rng, Rng};
+
 use raqote::{
     StrokeStyle, 
-    LineCap
+    LineCap, 
+    SolidSource
 };
 
 const DEPTH: i32 = 6;
 
 const ANGLE_DEGREES: f32 = 20.0;
 const ANGLE_RADS: f32 = ANGLE_DEGREES * PI / 180.0;
+
+const DIMENSIONS: [u32; 2] = [900, 600];
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum BarnsleyFernAlphabet { A, B, Left, Right, Open, Close } 
@@ -27,7 +32,7 @@ fn main() -> anyhow::Result<()> {
     let mut axiom = Axiom::new(A);
 
     let rules = rules!(
-        B => B : B,
+        B [0.6] => B : B,
         A => B : Left : Open : Open : A : Close : Right : A : Close 
                : Right : B : Open : Right : B : A : Close : Left : A
     );
@@ -42,14 +47,19 @@ fn main() -> anyhow::Result<()> {
         .assign_action(Left, Turn(-ANGLE_RADS))
         .assign_action(Right, Turn(ANGLE_RADS))
         .assign_action(Open, PushState)
-        .assign_action(Close, PopState)
+        .assign_action_set(Close, [PopState, SetSolidSource(
+            move || SolidSource::from_unpremultiplied_argb(
+                0xFF,
+                thread_rng().gen_range(0..100),
+                thread_rng().gen_range(150..200),
+                thread_rng().gen_range(0..150),
+            )
+        )])
         .build();
 
-    let style = StrokeStyle {
-        width: 2.0,
-        cap: LineCap::Round,
-        ..Default::default()
-    };
-
-    axiom.visualize(turtle).show([900, 600], &style)
+    axiom.visualize(turtle).show(
+        DIMENSIONS,
+        StrokeStyle { width: 2.0, cap: LineCap::Round, ..Default::default() }, 
+        SolidSource::from_unpremultiplied_argb(0xFF, 0x33, 0x99, 0x33)
+    )
 }

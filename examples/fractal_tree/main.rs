@@ -7,11 +7,13 @@ use lindenmayer_grammar::{
     TurtleAction
 };
 
-use raqote::StrokeStyle;
+use raqote::{StrokeStyle, SolidSource};
 
 const DEPTH: i32 = 8;
 
 const ANGLE: f32 = PI * 0.25;
+
+const DIMENSIONS: [u32; 2] = [650, 600];
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum FractalTreeAlphabet { Leaf, Node, Left, Right }
@@ -39,5 +41,9 @@ fn main() -> anyhow::Result<()> {
         .assign_action_set(Right, [PopState, Turn(ANGLE)])
         .build();
 
-    axiom.visualize(turtle).show([650, 600], &StrokeStyle::default())
+    axiom.visualize(turtle).show(
+        DIMENSIONS, 
+        StrokeStyle::default(), 
+        SolidSource::from_unpremultiplied_argb(0xFF, 0xFF, 0xFF, 0xFF)
+    )
 }

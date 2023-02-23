@@ -8,15 +8,17 @@ use lindenmayer_grammar::{
 };
 
 use raqote::{
-    StrokeStyle, 
-    LineCap
+    StrokeStyle,
+    SolidSource
 };
 
 const DEPTH: i32 = 10;
 
 const ANGLE: f32 = PI * 0.5;
 
+const DIMENSIONS: [u32; 2] = [600, 650];
 
+#[show_image::main]
 fn main() -> anyhow::Result<()> {
     let mut axiom = Axiom::new(0);
 
@@ -35,13 +37,11 @@ fn main() -> anyhow::Result<()> {
         .assign_action(1, Forward)
         .assign_action(2, Turn(-ANGLE))
         .assign_action(3, Turn(ANGLE))
-        .build();
+        .build();    
 
-    let style = StrokeStyle {
-        width: 3.0,
-        cap: LineCap::Butt,
-        ..Default::default()
-    };
-
-    axiom.visualize(turtle).show([600, 650], &style)
+    axiom.visualize(turtle).show(
+        DIMENSIONS, 
+        StrokeStyle { width: 3.0, ..Default::default() }, 
+        SolidSource::from_unpremultiplied_argb(0xFF, 0xFF, 0xFF, 0xFF)
+    )
 }

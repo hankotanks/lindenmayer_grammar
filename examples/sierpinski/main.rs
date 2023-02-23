@@ -7,13 +7,15 @@ use lindenmayer_grammar::{
     TurtleAction
 };
 
-use raqote::StrokeStyle;
+use raqote::{StrokeStyle, SolidSource};
 
 // The number of times to rewrite the axiom
 const DEPTH: i32 = 6;
 
 // The angle to turn by
 const ANGLE: f32 = TAU / 3.0;
+
+const DIMENSIONS: [u32; 2] = [900, 800];
 
 #[show_image::main]
 fn main() -> anyhow::Result<()> {
@@ -36,5 +38,9 @@ fn main() -> anyhow::Result<()> {
         .assign_action(3, Turn(ANGLE))
         .build();
 
-    axiom.visualize(turtle).show([900, 800], &StrokeStyle::default())
+    axiom.visualize(turtle).show(
+        DIMENSIONS, 
+        StrokeStyle::default(), 
+        SolidSource::from_unpremultiplied_argb(0xFF, 0xFF, 0xFF, 0xFF)
+    )
 }

@@ -7,11 +7,13 @@ use lindenmayer_grammar::{
     TurtleAction
 };
 
-use raqote::StrokeStyle;
+use raqote::{StrokeStyle, SolidSource};
 
 const DEPTH: u32 = 5;
 
 const ANGLE: f32 = PI * 0.5;
+
+const DIMENSIONS: [u32; 2] = [1200, 620];
 
 #[show_image::main]
 fn main() -> anyhow::Result<()> {
@@ -30,5 +32,9 @@ fn main() -> anyhow::Result<()> {
         .assign_action(2, Turn(ANGLE))
         .build();
 
-    axiom.visualize(turtle).show([1200, 620], &StrokeStyle::default())
+    axiom.visualize(turtle).show(
+        DIMENSIONS, 
+        StrokeStyle::default(), 
+        SolidSource::from_unpremultiplied_argb(0xFF, 0xFF, 0xFF, 0xFF)
+    )
 }

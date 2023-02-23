@@ -188,6 +188,8 @@ impl<A> Axiom<A> where A: Alphabet {
                 if let Some(token_length) = rule.matcher(&self.0[pointer..]) {
                     if thread_rng().gen::<f32>() < rule.probability.0 {
                         output.append(&mut rule.transcriber.0.clone());
+                    } else {
+                        output.append(&mut rule.matcher.0.clone());
                     }
 
                     pointer += token_length;
@@ -234,11 +236,15 @@ impl<A> Axiom<A> where A: Alphabet {
                         rule.transcriber.0.iter().cloned().rev().for_each(|token| { 
                             self.0.insert(pointer, token); 
                         } );
+
+                        pointer += rule.transcriber.len();
+
+                        size += rule.transcriber.len() as i32 - token_length as i32;
+                    } else {
+                        pointer += rule.matcher.len();
                     }
 
-                    pointer += rule.transcriber.0.len();
-
-                    size += rule.transcriber.0.len() as i32 - token_length as i32;
+                    
                     
                     continue 'token;
                 }
@@ -262,7 +268,7 @@ impl<A> Axiom<A> where A: Alphabet {
         use TurtleAction::*;
         for symbol in self.iter() {
             for action in turtle.0.get(symbol).unwrap_or(&Vec::new()) {
-                actions.push(*action);
+                actions.push(action.clone());
 
                 match action {
                     Forward => {
@@ -507,7 +513,7 @@ macro_rules! production {
 #[derive(Clone)]
 pub struct Turtle<A>(BTreeMap<A, Vec<TurtleAction>>) where A: Alphabet;
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum TurtleAction {
     Forward,
     Backward,
@@ -515,7 +521,9 @@ pub enum TurtleAction {
     PushState,
     PopState,
     PenUp,
-    PenDown
+    PenDown,
+    SetStrokeStyle(fn() -> StrokeStyle),
+    SetSolidSource(fn() -> SolidSource)
 }
 
 #[derive(Clone)]
@@ -555,7 +563,12 @@ pub struct Drawing {
 }
 
 impl Drawing {
-    pub fn new(width: i32, height: i32, origin: (f32, f32), actions: Vec<TurtleAction>) -> Self {
+    pub fn new(
+        width: i32, 
+        height: i32, 
+        origin: (f32, f32), 
+        actions: Vec<TurtleAction>
+    ) -> Self {
         Self {
             width,
             height,
@@ -564,18 +577,29 @@ impl Drawing {
         }
     }
 
-    fn build_path(&self, resolution: f32, offset: (f32, f32)) -> Path {
+    fn build_path(
+        &self, 
+        resolution: f32, 
+        offset: (f32, f32), 
+        initial_stroke_style: StrokeStyle, 
+        initial_solid_source: SolidSource
+    ) -> Vec<(Path, StrokeStyle, SolidSource)> {
         let offset_x = offset.0 + resolution * 0.5;
         let offset_y = offset.1 + resolution * 0.5;
+
+        let mut pos_x = self.origin.0 * resolution + offset_x;
+        let mut pos_y = self.origin.1 * resolution + offset_y;
 
         let mut heading = 0f32;
         let mut active = true;
 
-        let mut position = (self.origin.0 * resolution + offset_x, self.origin.1 * resolution + offset_y);
+        let mut paths = vec![(
+            PathBuilder::new(), 
+            initial_stroke_style, 
+            initial_solid_source
+        )];
 
-        let mut pb = PathBuilder::new();
-
-        pb.move_to(position.0, position.1);
+        paths.last_mut().unwrap().0.move_to(pos_x, pos_y);
 
         let mut state = VecDeque::new();
 
@@ -589,44 +613,63 @@ impl Drawing {
                     active = true; 
                 },
                 Forward => {
-                    position.0 += heading.cos() * resolution;
-                    position.1 += heading.sin() * resolution; 
+                    pos_x += heading.cos() * resolution;
+                    pos_y += heading.sin() * resolution; 
 
                     if active {
-                        pb.line_to(position.0, position.1);
+                        paths.last_mut().unwrap().0.line_to(pos_x, pos_y);
                     } else {
-                        pb.move_to(position.0, position.1);
+                        paths.last_mut().unwrap().0.move_to(pos_x, pos_y);
                     }
                 },
                 Backward => {
-                    position.0 -= heading.cos() * resolution;
-                    position.1 -= heading.sin() * resolution; 
+                    pos_x -= heading.cos() * resolution;
+                    pos_y -= heading.sin() * resolution; 
                     
                     if active {
-                        pb.line_to(position.0, position.1);
+                        paths.last_mut().unwrap().0.line_to(pos_x, pos_y);
                     } else {
-                        pb.move_to(position.0, position.1);
+                        paths.last_mut().unwrap().0.move_to(pos_x, pos_y);
                     }
                 },
                 Turn(rad) => {
                     heading += rad;
                 },
                 PushState => {
-                    state.push_front((position, heading));
+                    state.push_front((pos_x, pos_y, heading));
                 },
                 PopState => {
-                    (position, heading) = state.pop_front().unwrap();
-                    pb.move_to(position.0, position.1);
+                    (pos_x, pos_y, heading) = state.pop_front().unwrap();
+                    paths.last_mut().unwrap().0.move_to(pos_x, pos_y);
+                }
+                SetStrokeStyle(style) => {
+                    let mut temp = PathBuilder::new();
+                    temp.move_to(pos_x, pos_y);
+
+                    paths.push((temp, (style)(), paths.last().unwrap().2.clone()));
+                },
+                SetSolidSource(solid_source) => {
+                    let mut temp = PathBuilder::new();
+                    temp.move_to(pos_x, pos_y);
+
+                    paths.push((temp, paths.last().unwrap().1.clone(), (solid_source)()));
                 }
             }
         }
 
-        pb.finish()
+        paths.into_iter()
+            .map(|(pb, style, source)| (pb.finish(), style, source))
+            .collect::<Vec<_>>()
     }
 
-    fn build_draw_target(&self, size: [u32; 2], style: &StrokeStyle) -> DrawTarget {
-        let pen = style.width.ceil();
-        
+    fn build_draw_target(
+        &self, 
+        size: [u32; 2], 
+        initial_stroke_style: StrokeStyle, 
+        initial_solid_source: SolidSource
+    ) -> DrawTarget {
+        let pen = initial_stroke_style.width.ceil();
+
         let target_width = size[0] as i32 + pen as i32;
         let target_height = size[1] as i32 + pen as i32;
         
@@ -642,18 +685,26 @@ impl Drawing {
         let offset_y = (size[1] as f32 - resolution * (self.height + 2) as f32) / 2.0 + pen;
 
         target.clear(SolidSource::from_unpremultiplied_argb(0xFF, 0, 0, 0));
-        target.stroke(
-            &self.build_path(resolution, (offset_x, offset_y)),
-            &Source::Solid(SolidSource::from_unpremultiplied_argb(0xFF, 0xFF, 0xFF, 0xFF)),
-            style,
-            &DrawOptions::new(),
-        );
+
+        for (path, stroke_style, solid_source) in self.build_path(resolution, (offset_x, offset_y), initial_stroke_style, initial_solid_source) {
+            target.stroke(
+                &path,
+                &Source::Solid(solid_source),
+                &stroke_style,
+                &DrawOptions::new(),
+            );
+        }
 
         target
     }
 
-    pub fn show(&self, size: [u32; 2], style: &StrokeStyle) -> anyhow::Result<()> {
-        let draw_target = self.build_draw_target(size, style);
+    pub fn show(
+        &self, 
+        size: [u32; 2], 
+        initial_stroke_style: StrokeStyle, 
+        initial_solid_source: SolidSource
+    ) -> anyhow::Result<()> {
+        let draw_target = self.build_draw_target(size, initial_stroke_style, initial_solid_source);
 
         let image: Image = draw_target.into();
 
@@ -676,8 +727,14 @@ impl Drawing {
         Ok(())
     }
 
-    pub fn save(&self, size: [u32; 2], style: &StrokeStyle, file_name: &str) -> anyhow::Result<()> {
-        self.build_draw_target(size, style).write_png(file_name)?;
+    pub fn save(
+        &self, 
+        size: [u32; 2], 
+        initial_stroke_style: StrokeStyle, 
+        initial_solid_source: SolidSource, 
+        file_name: &str
+    ) -> anyhow::Result<()> {
+        self.build_draw_target(size, initial_stroke_style, initial_solid_source).write_png(file_name)?;
 
         Ok(())
     }

@@ -580,12 +580,13 @@ impl Drawing {
     fn build_path(
         &self, 
         resolution: f32, 
-        offset: (f32, f32), 
+        offset_x: f32,
+        offset_y: f32, 
         initial_stroke_style: StrokeStyle, 
         initial_solid_source: SolidSource
     ) -> Vec<(Path, StrokeStyle, SolidSource)> {
-        let offset_x = offset.0 + resolution * 0.5;
-        let offset_y = offset.1 + resolution * 0.5;
+        let offset_x = offset_x + resolution * 0.5;
+        let offset_y = offset_y + resolution * 0.5;
 
         let mut pos_x = self.origin.0 * resolution + offset_x;
         let mut pos_y = self.origin.1 * resolution + offset_y;
@@ -686,7 +687,15 @@ impl Drawing {
 
         target.clear(SolidSource::from_unpremultiplied_argb(0xFF, 0, 0, 0));
 
-        for (path, stroke_style, solid_source) in self.build_path(resolution, (offset_x, offset_y), initial_stroke_style, initial_solid_source) {
+        let paths = self.build_path(
+            resolution, 
+            offset_x, 
+            offset_y, 
+            initial_stroke_style, 
+            initial_solid_source
+        );
+
+        for (path, stroke_style, solid_source) in paths {
             target.stroke(
                 &path,
                 &Source::Solid(solid_source),
@@ -715,7 +724,7 @@ impl Drawing {
 
         let window = context().run_function_wait(
             move |context| -> anyhow::Result<WindowProxy> {
-                let mut window = context.create_window("image", window_options)?;
+                let mut window = context.create_window("L-System Visualization", window_options)?;
                 window.set_image("image", &image.as_image_view()?);
 
                 Ok(window.proxy())

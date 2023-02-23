@@ -10,7 +10,7 @@ To me, this approach obscured what was actually happening and felt like overkill
 This crate showcases my approach.
 It supports stochastic and context sensitive rules.
 
-Axioms are the strings that substitution is performed on, and are composed of symbols from a single `Alphabet` (a type that implements `Clone` and `Ord`).
+Axioms are the strings that substitution is performed on, and are composed of symbols from a single `Alphabet` (any type that implements `Clone` and `Ord`).
 Axioms can be rewritten using a `Ruleset`, which is an ordered collection of individual `Production` rules.
 The crate allows symbols to be mapped to the movement of a [turtle](https://en.wikipedia.org/wiki/Turtle_graphics).
 The resulting graphic can be displayed or saved as an image.
@@ -25,9 +25,9 @@ The resulting graphic can be displayed or saved as an image.
 
 ```
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum FractalTreeAlphabet { Leaf, Node, Left, Right }
+enum FractalTree { Leaf, Node, Left, Right }
 
-use FractalTreeAlphabet::*;
+use FractalTree::*;
 
 // Create an axiom from a single symbol
 let mut axiom = Axiom::new(Leaf);
@@ -52,6 +52,11 @@ let turtle = TurtleBuilder::new()
     .assign_action_set(Right, [PopState, Turn(PI * 0.25)])
     .build();
 
-// Last, draw the L-System's state and save to "fractal_tree.png"
-axiom.visualize(turtle).save([650, 600], "fractal_tree.png).unwrap();
+// Last, draw the L-System's state and save to "tree.png"
+axiom.visualize(turtle).save(
+    [650, 600], 
+    StrokeStyle { width: 2.0, ..Default::default() }, 
+    SolidSource::from_unpremultiplied_argb(0xFF, 0xFF, 0xFF, 0xFF)
+    "tree.png"
+).unwrap();
 ```

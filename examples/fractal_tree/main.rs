@@ -16,11 +16,11 @@ const ANGLE: f32 = PI * 0.25;
 const DIMENSIONS: [u32; 2] = [650, 600];
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum FractalTreeAlphabet { Leaf, Node, Left, Right }
+enum FractalTree { Leaf, Node, Left, Right }
 
 #[show_image::main]
 fn main() -> anyhow::Result<()> {
-    use FractalTreeAlphabet::*;
+    use FractalTree::*;
 
     let mut axiom = Axiom::new(Leaf);
     

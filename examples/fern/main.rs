@@ -23,11 +23,11 @@ const ANGLE_RADS: f32 = ANGLE_DEGREES * PI / 180.0;
 const DIMENSIONS: [u32; 2] = [900, 600];
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum BarnsleyFernAlphabet { A, B, Left, Right, Open, Close } 
+enum BarnsleyFern { A, B, Left, Right, Open, Close } 
 
 #[show_image::main]
 fn main() -> anyhow::Result<()> {
-    use BarnsleyFernAlphabet::*;
+    use BarnsleyFern::*;
     
     let mut axiom = Axiom::new(A);
 
@@ -48,7 +48,7 @@ fn main() -> anyhow::Result<()> {
         .assign_action(Right, Turn(ANGLE_RADS))
         .assign_action(Open, PushState)
         .assign_action_set(Close, [PopState, SetSolidSource(
-            move || SolidSource::from_unpremultiplied_argb(
+            move |_color| SolidSource::from_unpremultiplied_argb(
                 0xFF,
                 thread_rng().gen_range(0..100),
                 thread_rng().gen_range(150..200),

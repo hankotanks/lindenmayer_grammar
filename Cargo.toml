@@ -33,3 +33,7 @@ path = "examples/dragon_curve/main.rs"
 [[example]]
 name = "fern"
 path = "examples/fern/main.rs"
+
+[[example]]
+name = "levy"
+path = "examples/levy/main.rs"

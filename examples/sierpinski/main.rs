@@ -7,7 +7,10 @@ use lindenmayer_grammar::{
     TurtleAction
 };
 
-use raqote::{StrokeStyle, SolidSource};
+use raqote::{
+    StrokeStyle, 
+    SolidSource
+};
 
 // The number of times to rewrite the axiom
 const DEPTH: i32 = 6;

@@ -334,7 +334,9 @@ impl<A> Axiom<A> where A: Alphabet {
 pub struct Production<A: Alphabet> {
     matcher: Axiom<A>,
     transcriber: Axiom<A>,
-    probability: OrderedFloat<f32>
+    probability: OrderedFloat<f32>,
+    precursor: Option<Axiom<A>>,
+    successor: Option<Axiom<A>>
 }
 
 impl<A> Production<A> where A: Alphabet {
@@ -354,8 +356,14 @@ impl<A> Production<A> where A: Alphabet {
     /// // The two productions are equal
     /// assert_eq!(p1, p2);
     /// ```
-    pub fn new(matcher: Axiom<A>, transcriber: Axiom<A>, probability: f32) -> Self {
-        Self { matcher, transcriber, probability: OrderedFloat(probability) }
+    pub fn new(matcher: Axiom<A>, transcriber: Axiom<A>, probability: f32, precursor: Option<Axiom<A>>, successor: Option<Axiom<A>>) -> Self {
+        Self { 
+            matcher, 
+            transcriber, 
+            probability: OrderedFloat(probability),
+            precursor,
+            successor
+        }
     }
 
     fn matcher(&self, slice: &[A]) -> Option<usize> {
@@ -432,26 +440,26 @@ impl<A> Debug for Ruleset<A> where A: Alphabet + Debug {
 /// ```
 #[macro_export]
 macro_rules! rules {
-    ($($a:literal $(: $b:literal)* $([$p:literal])? => $c:literal $(: $d:literal)*),+) => {
+    ($($(| $f:literal $(: $g:literal)* |)? $a:literal $(: $b:literal)* $(| $x:literal $(: $z:literal)* |)? $([$p:literal])? => $c:literal $(: $d:literal)*),+) => {
         {
             use std::collections::BTreeSet;
 
             use lindenmayer_grammar::{production, Ruleset};
 
             let mut ruleset = BTreeSet::new();
-            $(ruleset.insert(production!($a $(: $b)* $([$p])? => $c $(: $d)*));)+
+            $(ruleset.insert(production!($(| $f $(: $g)* |)? $a $(: $b)* $(| $x $(: $z)* |)? $([$p])? => $c $(: $d)*));)+
             
             Ruleset::from(ruleset)
         }
     };
-    ($($a:path $(: $b:path)* $([$p:literal])? => $c:path $(: $d:path)*),+) => {
+    ($($(| $f:path $(: $g:path)* |)? $a:path $(: $b:path)* $(| $x:path $(: $z:path)* |)? $([$p:literal])? => $c:path $(: $d:path)*),+) => {
         {
             use std::collections::BTreeSet;
 
             use lindenmayer_grammar::{production, Ruleset};
 
             let mut ruleset = BTreeSet::new();
-            $(ruleset.insert(production!($a $(: $b)* $([$p])? => $c $(: $d)*));)+
+            $(ruleset.insert(production!($(| $f $(: $g)* |)? $a $(: $b)* $(| $x $(: $z)* |)? $([$p])? => $c $(: $d)*));)+
             
             Ruleset::from(ruleset)
         }
@@ -476,36 +484,102 @@ macro_rules! rules {
 /// ```
 #[macro_export]
 macro_rules! production {
-    ($a:literal $(: $b:literal)* $([$p:literal])? => $c:literal $(: $d:literal)*) => {
+    ($(| $f:literal $(: $g:literal)* |)? $a:literal $(: $b:literal)* $(| $x:literal $(: $z:literal)* |)? $([$p:literal])? => $c:literal $(: $d:literal)*) => {
         {
             use lindenmayer_grammar::{Axiom, Production};
 
             let mut matcher = vec![$a];
-            $(matcher.push($b);)*
+
+            $(
+                matcher.push($b);
+            )*
 
             let mut transcriber = vec![$c];
-            $(transcriber.push($d);)*
+
+            $(
+                transcriber.push($d);
+            )*
 
             let mut probability = 1.0;
-            $(probability = $p;)?
 
-            Production::new(Axiom::with_elements(matcher), Axiom::with_elements(transcriber), probability)
+            $(
+                probability = $p;
+            )?
+
+            let mut precursor = Vec::new();
+            $(
+                precursor.push($f);
+
+                $(
+                    precursor.push($g);
+                )*
+            )?
+
+            let mut successor = Vec::new();
+            $(
+                successor.push($x);
+
+                $(
+                    successor.push($z);
+                )*
+            )?
+
+            Production::new(
+                Axiom::with_elements(matcher), 
+                Axiom::with_elements(transcriber), 
+                probability,
+                if precursor.is_empty() { None } else { Some(Axiom::with_elements(precursor)) },
+                if successor.is_empty() { None } else { Some(Axiom::with_elements(successor)) }
+            )
         }
     };
-    ($a:path $(: $b:path)* $([$p:literal])? => $c:path $(: $d:path)*) => {
+    ($(| $f:path $(: $g:path)* |)? $a:path $(: $b:path)* $(| $x:path $(: $z:path)* |)? $([$p:literal])? => $c:path $(: $d:path)*) => {
         {
             use lindenmayer_grammar::{Axiom, Production};
 
             let mut matcher = vec![$a];
-            $(matcher.push($b);)*
+
+            $(
+                matcher.push($b);
+            )*
 
             let mut transcriber = vec![$c];
-            $(transcriber.push($d);)*
+
+            $(
+                transcriber.push($d);
+            )*
 
             let mut probability = 1.0;
-            $(probability = $p;)?
 
-            Production::new(Axiom::with_elements(matcher), Axiom::with_elements(transcriber), probability)
+            $(
+                probability = $p;
+            )?
+
+            let mut precursor = Vec::new();
+            $(
+                precursor.push($f);
+
+                $(
+                    precursor.push($g);
+                )*
+            )?
+
+            let mut successor = Vec::new();
+            $(
+                successor.push($x);
+
+                $(
+                    successor.push($z);
+                )*
+            )?
+
+            Production::new(
+                Axiom::with_elements(matcher), 
+                Axiom::with_elements(transcriber), 
+                probability,
+                if precursor.is_empty() { None } else { Some(Axiom::with_elements(precursor)) },
+                if successor.is_empty() { None } else { Some(Axiom::with_elements(successor)) }
+            )
         }
     };
 }
@@ -522,8 +596,8 @@ pub enum TurtleAction {
     PopState,
     PenUp,
     PenDown,
-    SetStrokeStyle(fn() -> StrokeStyle),
-    SetSolidSource(fn() -> SolidSource)
+    SetStrokeStyle(fn(&StrokeStyle) -> StrokeStyle),
+    SetSolidSource(fn(&SolidSource) -> SolidSource)
 }
 
 #[derive(Clone)]
@@ -647,13 +721,13 @@ impl Drawing {
                     let mut temp = PathBuilder::new();
                     temp.move_to(pos_x, pos_y);
 
-                    paths.push((temp, (style)(), paths.last().unwrap().2.clone()));
+                    paths.push((temp, (style)(&paths.last().unwrap().1), paths.last().unwrap().2.clone()));
                 },
                 SetSolidSource(solid_source) => {
                     let mut temp = PathBuilder::new();
                     temp.move_to(pos_x, pos_y);
 
-                    paths.push((temp, paths.last().unwrap().1.clone(), (solid_source)()));
+                    paths.push((temp, paths.last().unwrap().1.clone(), (solid_source)(&paths.last().unwrap().2)));
                 }
             }
         }

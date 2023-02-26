@@ -21,6 +21,9 @@ The resulting graphic can be displayed or saved as an image.
 | ![](/images/dragon_curve.png) | ![](/images/sierpinski.png) |
 |:---------------------:|:---------------------:|
 
+| ![](/images/levy.png) |
+|:---------------------:|
+
 ## Example
 
 ```

@@ -30,7 +30,7 @@ fn main() -> anyhow::Result<()> {
     );
 
     for _ in 0..DEPTH { 
-        axiom.rewrite(&rules); 
+        axiom.rewrite_in_place(&rules); 
     }
 
     use TurtleAction::*;

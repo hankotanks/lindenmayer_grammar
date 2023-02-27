@@ -37,9 +37,9 @@
 
 use std::{
     fmt::Debug, 
-    collections::{BTreeSet, BTreeMap, VecDeque}, 
     vec::IntoIter, 
     iter::once, 
+    collections::{BTreeSet, BTreeMap, VecDeque}, 
     slice::Iter
 };
 
@@ -67,46 +67,10 @@ use show_image::{
     WindowOptions
 };
 
-/// An internal trait that is automatically implied for all types that can be used as valid alphabets.
-/// 
-/// Any type which implements `Clone`, and `Ord` is considered an Alphabet. This trait does not need to be derived.
-/// 
-/// # Examples
-/// 
-/// ```
-/// #[derive(Clone, Copy, PartialEq, Debug)]
-/// enum Koch { Forward, Left, Right }
-/// ```
 pub trait Alphabet: Clone + Ord {  }
 
 impl<T> Alphabet for T where T: Clone + Ord {  }
 
-/// A sentence of symbols from a single [Alphabet].
-/// 
-/// An axiom can be initialized from a single symbol or a collection of symbols.
-/// When provided a [Ruleset], an Axiom can be rewritten, either with the creation of a new Axiom (through the associated [step](#method:step) method) or mutably with [rewrite](#method:rewrite).
-/// 
-/// The collection of symbols that underpin an Axiom cannot be accessed, although they can be turned into iterators with the associated [iter](#method:iter) method.
-/// 
-/// # Examples
-/// 
-/// ```
-/// use lindenmayer_grammar::{Axiom, rules};
-/// 
-/// // i32 implements the requisite traits
-/// let mut axiom = Axiom::from(vec![0, 1, 0]);
-/// 
-/// for _ in 0..3 {
-///     // Rewrite the axiom using Lindenmayer's algae model
-///     axiom.rewrite(&rules!(0 => 0 : 1, 1 => 0));
-/// }
-/// 
-/// // We can iterate through the axiom, printing each element...
-/// for symbol in &axiom { print!("{:?}, ", symbol); }
-/// 
-/// // The iterator can still be collected
-/// let elements = axiom.collect::<Vec<_>>();
-/// ```
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Axiom<A>(Vec<A>) where A: Alphabet;
 
@@ -123,21 +87,16 @@ impl<A> Axiom<A> where A: Alphabet {
         self.0.iter()
     }
 
-    /// Returns the length of the current [Axiom]
-    /// 
-    /// # Examples
-    /// 
-    /// ```
-    /// use lindenmayer_grammar::Axiom;
-    /// 
-    /// assert_eq!(Axiom::from(vec![0, 1, 0, 1]).len(), 4);
-    /// ```
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    pub fn as_slice(&self) -> &[A] {
+        self.0.as_slice()
     }
 }
 
@@ -157,111 +116,13 @@ impl<A> IntoIterator for Axiom<A> where A: Alphabet {
 }
 
 impl<A> Axiom<A> where A: Alphabet {
-    /// Produces a new Axiom from the provided [Ruleset].
-    /// 
-    /// Can be used when the initial axiom shouldn't be consumed.
-    /// For example, if we want to accumulate all generations of an L-system.
-    /// 
-    /// Axioms can be rewritten in place using their associated [rewrite](#method:rewrite) method.
-    /// 
-    /// # Examples
-    /// 
-    /// ```
-    /// use lindenmayer_grammar::{Axiom, rules};
-    /// 
-    /// let mut axioms = vec![Axiom::from(0)];
-    /// 
-    /// // Define the Ruleset for Lindenmayer's algae model
-    /// let rules = rules!(0 => 0 : 1, 1 => 0);
-    /// 
-    /// for _ in 0..3 {
-    ///     // Each step, push the new axiom to the list of previous axioms
-    ///     axioms.push(axioms.last().unwrap().step(&rules));
-    /// }
-    /// ```
-    pub fn step(&self, rules: &Ruleset<A>) -> Axiom<A> {
-        let mut output: Vec<A> = Vec::new();
-
-        let mut pointer = 0;
-        'token: while pointer < self.0.len() {
-            for rule in rules.0.iter() {
-                if let Some(token_length) = rule.matcher(&self.0[pointer..]) {
-                    if thread_rng().gen::<f32>() < rule.probability.0 {
-                        output.append(&mut rule.transcriber.0.clone());
-                    } else {
-                        output.append(&mut rule.matcher.0.clone());
-                    }
-
-                    pointer += token_length;
-                    
-                    continue 'token;
-                }
-            }
-    
-            output.push(self.0[pointer].clone());
-        }
-    
-        Self::with_elements(output)
-    }
-
-    /// Rewrites the [Axiom] using the given [Ruleset]
-    /// 
-    /// Can be used to quickly step through all generations of an L-system to a desired point.
-    /// 
-    /// The associated method [step](#method:step) produces a new [Axiom] from the original.
-    /// 
-    /// # Examples
-    /// 
-    /// ```
-    /// use lindenmayer_grammar::{Axiom, rules};
-    /// 
-    /// // Define the Ruleset for Lindenmayer's algae model
-    /// let rules = rules!(0 => 0 : 1, 1 => 0);
-    /// 
-    /// // Create the system's initiator
-    /// let mut axiom = Axiom::from(0);
-    /// 
-    /// // Continue to rewrite it until its length exceeds 100 symbols
-    /// while axiom.len() < 100 { axiom.rewrite(&rules); }
-    /// ```
-    pub fn rewrite(&mut self, rules: &Ruleset<A>) {
-        let mut size = self.0.len() as i32;
-
-        let mut pointer = 0;
-        'token: while (pointer as i32) < size {
-            for rule in rules.0.iter() {
-                if let Some(token_length) = rule.matcher(&self.0[pointer..]) {
-                    if thread_rng().gen::<f32>() < rule.probability.0 {
-                        self.0.drain(pointer..(pointer + token_length));
-                        rule.transcriber.0.iter().cloned().rev().for_each(|token| { 
-                            self.0.insert(pointer, token); 
-                        } );
-
-                        pointer += rule.transcriber.len();
-
-                        size += rule.transcriber.len() as i32 - token_length as i32;
-                    } else {
-                        pointer += rule.matcher.len();
-                    }
-
-                    
-                    
-                    continue 'token;
-                }
-            }
-
-            pointer += 1;
-        }
-    }
-
-    pub fn rewrite_with_context(&self, rules: &Ruleset<A>) -> Axiom<A> {
+    pub fn rewrite(&self, rules: &Ruleset<A>) -> Axiom<A> {
         let mut output = Vec::new();
 
         let mut pointer = 0;
-
         'token: while pointer < self.len() {
             for rule in rules.0.iter() {
-                if rule.new_matcher(self.0.as_slice(), pointer) {
+                if rule.matcher(self.0.as_slice(), pointer) {
                     output.append(&mut rule.transcriber.0.clone());
                     pointer += rule.matcher.len();
 
@@ -275,6 +136,10 @@ impl<A> Axiom<A> where A: Alphabet {
         }
 
         Axiom::with_elements(output)
+    }
+
+    pub fn rewrite_in_place(&mut self, rules: &Ruleset<A>) {
+        self.0 = self.rewrite(rules).0;
     }
 
     pub fn visualize(&self, turtle: Turtle<A>) -> Drawing {
@@ -321,79 +186,42 @@ impl<A> Axiom<A> where A: Alphabet {
             }
         }
 
-        Drawing::new((maxima.0 - minima.0) as i32, (maxima.1 - minima.1) as i32, (minima.0.abs(), minima.1.abs()), actions)
+        Drawing::new(
+            (maxima.0 - minima.0) as i32, 
+            (maxima.1 - minima.1) as i32, 
+            (minima.0.abs(), minima.1.abs()), 
+            actions
+        )
     }
 }
 
-/// A rule that dictates how symbols are rewritten in an L-System.
-/// 
-/// Each [Production] consists of two axioms
-/// - the matcher
-/// - the transcriber
-/// 
-/// When the matcher is found in a given [Axiom], it is replaced with the transcriber.
-/// Productions are most easily defined using the [production!] macro.
-/// 
-/// Productions cannot be applied to axioms on their own, they must be compiled into a [Ruleset] first.
-/// 
-/// # Examples
-/// 
-/// ```
-/// use lindenmayer_grammar::{Axiom, Ruleset, Production, production};
-/// 
-/// let mut axiom = Axiom::from(0);
-/// 
-/// // Create two productions. The former uses the struct definition, the second uses a macro
-/// let p1 = Production::new(Axiom::from(0), Axiom::from(vec![0, 1]));
-/// let p2 = production!(1 => 0);
-/// 
-/// // Compile the two productions into a Ruleset
-/// let rules = Ruleset::from(vec![p1, p2]);
-/// 
-/// // Apply the Ruleset
-/// axiom.rewrite(&rules);
-/// ```
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Production<A: Alphabet> {
     matcher: Axiom<A>,
     transcriber: Axiom<A>,
-    probability: OrderedFloat<f32>,
     precursor: Option<Axiom<A>>,
-    successor: Option<Axiom<A>>
+    successor: Option<Axiom<A>>,
+    probability: OrderedFloat<f32>
 }
 
 impl<A> Production<A> where A: Alphabet {
-    /// Creates a new [Production] from two Axioms
-    /// 
-    /// Consider using the more concise [production!] macro syntax instead.
-    /// 
-    /// # Examples
-    /// 
-    /// ```
-    /// use lindenmayer_grammar::{Axiom, Production, production};
-    /// 
-    /// // Create two identical productions. The former uses the struct definition, the second uses a macro
-    /// let p1 = Production::new(Axiom::from(0), Axiom::from(vec![0, 1]));
-    /// let p2 = production!(0 => 0 : 1);
-    /// 
-    /// // The two productions are equal
-    /// assert_eq!(p1, p2);
-    /// ```
-    pub fn new(matcher: Axiom<A>, transcriber: Axiom<A>, probability: f32, precursor: Option<Axiom<A>>, successor: Option<Axiom<A>>) -> Self {
+    pub fn new(
+        matcher: Axiom<A>, 
+        transcriber: Axiom<A>, 
+        precursor: Option<Axiom<A>>, 
+        successor: Option<Axiom<A>>,
+        probability: f32
+    ) -> Self {
         Self { 
             matcher, 
             transcriber, 
-            probability: OrderedFloat(probability),
             precursor,
-            successor
+            successor,
+            probability: OrderedFloat(probability),
         }
     }
 
-    fn matcher(&self, slice: &[A]) -> Option<usize> {
-        (1..=slice.len()).find(|&i| self.matcher.0 == slice[0..i])
-    }
-
-    fn new_matcher(&self, tokens: &[A], index: usize) -> bool {
+    fn matcher(&self, tokens: &[A], index: usize) -> bool {
         if thread_rng().gen::<f32>() > self.probability.0 { return false; }
 
         if !tokens[index..].starts_with(self.matcher.0.as_slice()) { return false; }
@@ -419,31 +247,38 @@ impl<A> Production<A> where A: Alphabet {
 
 impl<A> Debug for Production<A> where A: Alphabet + Debug {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let matcher = format!("{:?}", &self.matcher).replace(',', " :");
-        let transcriber = format!("{:?}", &self.transcriber).replace(',', " :");
 
-        write!(f, "{} => {}", 
-            matcher.trim_start_matches('[').trim_end_matches(']'), 
-            transcriber.trim_start_matches('[').trim_end_matches(']')
-        )
+        #[inline]
+        fn fmt_axiom<A>(axiom: &Axiom<A>) -> String where A: Alphabet + Debug {
+            format!("{:?}", axiom)
+                .replace(',', " :")
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .to_string()
+        }
+
+        let mut matcher = fmt_axiom(&self.matcher);
+
+        if let Some(precursor) = &self.precursor {
+            matcher.insert_str(0, " | ");
+            matcher.insert_str(0, &fmt_axiom(precursor));
+        }
+
+        if let Some(successor) = &self.successor {
+            matcher.push_str(" | ");
+            matcher.push_str(&fmt_axiom(successor));
+        }
+
+        let mut transcriber = fmt_axiom(&self.transcriber);
+
+        if self.probability.0 != 1.0 {
+            transcriber.push_str(&format!(" ({})", self.probability.0));
+        }
+
+        write!(f, "\"{} => {}\"", matcher, transcriber)
     }
 }
 
-/// An ordered collection of [Production] rules.
-/// 
-/// Can be created from a single production, a collection of productions, or through the [rules!] macro.
-/// 
-/// Identity productions are implicit, and do not need to be added to the Ruleset.
-/// 
-/// # Examples
-/// 
-/// ```
-/// use lindenmayer_grammar::{Ruleset, rules, production};
-/// 
-/// // The following Ruleset initializations are equivalent
-/// let rs = rules!(0 => 0 : 1, 1 => 0);
-/// let rs = Ruleset::from(vec![production!(0 => 0 : 1), production!(1 => 0)]);
-/// ```
 #[derive(Clone)]
 pub struct Ruleset<A>(BTreeSet<Production<A>>) where A: Alphabet;
 
@@ -471,19 +306,6 @@ impl<A> Debug for Ruleset<A> where A: Alphabet + Debug {
     }
 }
 
-/// Builds a [Ruleset] from a comma-separated list of [Production] statements.
-/// 
-/// Matcher and transcriber axioms should be separated by a `=>` symbol.
-/// 
-/// The elements of the two components should be separated with a colon.
-/// 
-/// # Examples
-/// 
-/// ```
-/// use lindenmayer_grammar::rules;
-///
-/// rules!(0 => 0 : 1, 1 => 0);
-/// ```
 #[macro_export]
 macro_rules! rules {
     ($($(| $f:literal $(: $g:literal)* |)? $a:literal $(: $b:literal)* $(| $x:literal $(: $z:literal)* |)? $([$p:literal])? => $c:literal $(: $d:literal)*),+) => {
@@ -512,22 +334,6 @@ macro_rules! rules {
     };
 }
 
-/// A wrapper to create a single [Production].
-/// 
-/// Matcher and transcriber axioms should be separated by a `=>` symbol.
-/// 
-/// The elements of the two components should be separated with a colon.
-/// 
-/// # Examples
-/// 
-/// ```
-/// use lindenmayer_grammar::{Axiom, Production, production};
-/// 
-/// production!(0 => 0 : 1);
-/// 
-/// // This is equivalent to...
-/// Production::new(Axiom::from(0), Axiom::from(vec![0, 1]));
-/// ```
 #[macro_export]
 macro_rules! production {
     ($(| $f:literal $(: $g:literal)* |)? $a:literal $(: $b:literal)* $(| $x:literal $(: $z:literal)* |)? $([$p:literal])? => $c:literal $(: $d:literal)*) => {
@@ -573,9 +379,9 @@ macro_rules! production {
             Production::new(
                 Axiom::with_elements(matcher), 
                 Axiom::with_elements(transcriber), 
-                probability,
                 if precursor.is_empty() { None } else { Some(Axiom::with_elements(precursor)) },
-                if successor.is_empty() { None } else { Some(Axiom::with_elements(successor)) }
+                if successor.is_empty() { None } else { Some(Axiom::with_elements(successor)) },
+                probability
             )
         }
     };
@@ -622,9 +428,9 @@ macro_rules! production {
             Production::new(
                 Axiom::with_elements(matcher), 
                 Axiom::with_elements(transcriber), 
-                probability,
                 if precursor.is_empty() { None } else { Some(Axiom::with_elements(precursor)) },
-                if successor.is_empty() { None } else { Some(Axiom::with_elements(successor)) }
+                if successor.is_empty() { None } else { Some(Axiom::with_elements(successor)) },
+                probability
             )
         }
     };
@@ -863,7 +669,8 @@ impl Drawing {
         initial_solid_source: SolidSource, 
         file_name: &str
     ) -> anyhow::Result<()> {
-        self.build_draw_target(size, initial_stroke_style, initial_solid_source).write_png(file_name)?;
+        self.build_draw_target(size, initial_stroke_style, initial_solid_source)
+            .write_png(file_name)?;
 
         Ok(())
     }

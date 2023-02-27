@@ -37,7 +37,3 @@ path = "examples/fern/main.rs"
 [[example]]
 name = "levy"
 path = "examples/levy/main.rs"
-
-[[example]]
-name = "testing"
-path = "examples/testing/main.rs"

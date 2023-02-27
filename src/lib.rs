@@ -1,4 +1,4 @@
-//! A minimal implementation of the Lindenmayer grammar using Enum alphabets
+//! A minimal implementation of the Lindenmayer formal grammar with visualization tools
 //! 
 //! L-systems can be defined by three attributes
 //! - An [Alphabet] of symbols[^a]
@@ -7,33 +7,48 @@
 //! 
 //! # Example
 //! 
-//! Below is a simple implementation of a binary fractal tree L-system.
+//! Below is a simple implementation of a [binary fractal tree](https://en.wikipedia.org/wiki/Fractal_canopy) L-system.
 //! 
 //! ```
-//! use lindenmayer_grammar::{Axiom, rules};
-//! 
-//! // Define the alphabet and derive necessary traits
 //! #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-//! enum BFTAlphabet { Leaf, Node, Left, Right }
+//! enum FractalTree { Leaf, Node, Left, Right }
 //! 
-//! use BFTAlphabet::*;
-//!
-//! // The L-system initiator
-//! let mut axiom = Axiom::from(Leaf);
-//!
-//! // Declare the system's productions with the rules! macro
+//! // Import all enum variants for ease of use
+//! use FractalTree::*;
+//! 
+//! // Create an axiom from a single symbol
+//! let mut axiom = Axiom::new(Leaf);
+//! 
+//! // Define the ruleset for creating a fractal tree
 //! let rules = rules!(
-//!     Node => Node : Node,
+//!     Node => Node : Node, 
 //!     Leaf => Node : Left : Leaf : Right : Leaf
 //! );
-//!
-//! // The axiom is rewritten using the defined rules, resulting in
-//! // [Node, Left, Leaf, Right, Leaf]
-//! axiom.rewrite(&rules); 
-
+//! 
+//! // Rewrite the axiom 6 times
+//! for _ in 0..6 { 
+//!     axiom.rewrite(&rules); 
+//! }
+//! 
+//! // Build a turtle using the TurtleBuilder type
+//! use TurtleAction::*;
+//! let turtle = TurtleBuilder::new()
+//!     .assign_action_set(Leaf, [Forward, PenUp, Backward, PenDown])
+//!     .assign_action(Node, Forward)
+//!     .assign_action_set(Left, [PushState, Turn(-PI * 0.25)])
+//!     .assign_action_set(Right, [PopState, Turn(PI * 0.25)])
+//!     .build();
+//! 
+//! // Last, draw the L-System's state and save to "tree.png"
+//! axiom.visualize(turtle).save(
+//!     [650, 600], 
+//!     StrokeStyle { width: 2.0, ..Default::default() }, 
+//!     SolidSource::from_unpremultiplied_argb(0xFF, 0xFF, 0xFF, 0xFF)
+//!     "tree.png"
+//! ).unwrap();
 //! ```
 //! 
-//! [^a]: In this crate, any type which implements `Clone` and `Ord` is considered an Alphabet. Any integer type is ideal for this use case, but Enums can work too!
+//! [^a]: In this crate, any type which implements `Clone` and `Ord` is a valid Alphabet. Any integer type is ideal for this use case, but enums can work too if they derive the appropriate subtraits!
 
 use std::{
     fmt::Debug, 
@@ -67,34 +82,89 @@ use show_image::{
     WindowOptions
 };
 
+/// An internal trait that is automatically implied for all types that can be used as valid alphabets.
+/// 
+/// Any type which implements `Clone`, and `Ord` is a valid Alphabet. This trait does not need to be derived.
+/// 
+/// # Examples
+/// 
+/// ```
+/// #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+/// enum Koch { Forward, Left, Right }
+/// ```
 pub trait Alphabet: Clone + Ord {  }
 
 impl<T> Alphabet for T where T: Clone + Ord {  }
 
+
+/// A sentence of symbols from a single [Alphabet].
+/// 
+/// An axiom can be initialized from a single symbol or a collection of symbols.
+/// When provided a [Ruleset], an Axiom can be rewritten, either with the creation of a new Axiom (through the associated [rewrite](#method:rewrite) method) or mutably with [rewrite_in_place](#method:rewrite_in_place).
+/// 
+/// The collection of symbols that underpin an Axiom cannot be mutably accessed, although they can be turned into iterators with the associated [iter](#method:iter) method or represented as an immutable slice with [as_slice](#method:as_slice).
+/// 
+/// # Examples
+/// 
+/// ```
+/// use lindenmayer_grammar::{Axiom, rules};
+/// 
+/// // i32 implements the requisite traits
+/// let mut axiom = Axiom::with_elements([0, 1, 0]);
+/// 
+/// for _ in 0..3 {
+///     // Rewrite the axiom using Lindenmayer's algae model
+///     axiom.rewrite_in_place(&rules!(0 => 0 : 1, 1 => 0));
+/// }
+/// 
+/// // Since i32 implements Debug, any Axiom composed of i32 elements implements Debug
+/// println!("{:?}", &axiom);
+/// 
+/// // Iterating through an Axiom
+/// for symbol in axiom.iter() {
+///     todo!()
+/// }
+/// ```
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Axiom<A>(Vec<A>) where A: Alphabet;
 
 impl<A> Axiom<A> where A: Alphabet {
+    /// Create a new Axiom from a single symbol
     pub fn new(symbol: A) -> Self {
         Self(vec![symbol])
     }
 
+    /// Create a new Axiom from any collection of symbols that can be iterated over.
+    /// 
+    /// To avoid unexpected behavior, any collection provided to this function should preserve order.
+    /// 
+    /// # Examples
+    /// ```
+    /// use lindenmayer_grammar::Axiom;
+    /// 
+    /// assert_eq!(Axiom::with_elements([0, 1, 0]), Axiom::with_elements(vec![0, 1, 0]));
+    /// assert_eq!(Axiom::new(0), Axiom::with_elements([0]))
+    /// ```
     pub fn with_elements<I: IntoIterator<Item = A>>(collection: I) -> Self {
         Self(collection.into_iter().collect::<Vec<_>>())
     }
 
+    /// Iterate over the elements of an Axiom, yielding references to the Axiom's elements
     pub fn iter(&self) -> Iter<A> {
         self.0.iter()
     }
 
+    /// Returns the number of elements in the Axiom
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
+    /// Returns `true` if the Axiom is empty, `false` otherwise.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    // Extracts a slice containing all of the Axiom's elements.
     pub fn as_slice(&self) -> &[A] {
         self.0.as_slice()
     }
@@ -116,6 +186,28 @@ impl<A> IntoIterator for Axiom<A> where A: Alphabet {
 }
 
 impl<A> Axiom<A> where A: Alphabet {
+    /// Produces a new Axiom from the provided [Ruleset].
+    /// 
+    /// Can be used when the initial axiom shouldn't be consumed.
+    /// For example, if we want to accumulate all generations of an L-system.
+    /// 
+    /// Axioms can be mutably rewritten using their associated [rewrite_in_place](#method:rewrite_in_place) method.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use lindenmayer_grammar::{Axiom, rules};
+    /// 
+    /// let mut axioms = vec![Axiom::new(0)];
+    /// 
+    /// // Define the Ruleset for Lindenmayer's algae model
+    /// let rules = rules!(0 => 0 : 1, 1 => 0);
+    /// 
+    /// for _ in 0..3 {
+    ///     // Each step, push the new axiom to the list of previous axioms
+    ///     axioms.push(axioms.last().unwrap().rewrite(&rules));
+    /// }
+    /// ```
     pub fn rewrite(&self, rules: &Ruleset<A>) -> Axiom<A> {
         let mut output = Vec::new();
 
@@ -138,10 +230,52 @@ impl<A> Axiom<A> where A: Alphabet {
         Axiom::with_elements(output)
     }
 
+    /// Rewrites the [Axiom] using the given [Ruleset]
+    /// 
+    /// Can be used to quickly step through all generations of an L-system to a desired point.
+    /// 
+    /// The associated method [rewrite](#method:rewrite) produces a new [Axiom] from the original.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use lindenmayer_grammar::{Axiom, rules};
+    /// 
+    /// // Define the Ruleset for Lindenmayer's algae model
+    /// let rules = rules!(0 => 0 : 1, 1 => 0);
+    /// 
+    /// // Create the system's initiator
+    /// let mut axiom = Axiom::new(0);
+    /// 
+    /// // Continue to rewrite it until its length exceeds 100 symbols
+    /// while axiom.len() < 32 { axiom.rewrite(&rules); }
+    /// ```
     pub fn rewrite_in_place(&mut self, rules: &Ruleset<A>) {
         self.0 = self.rewrite(rules).0;
     }
 
+    /// Generates a [Drawing] from the axiom and a [Turtle], which describes the actions each symbol represents.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use std::f32::consts::PI;
+    /// 
+    /// use lindenmayer_grammar::{Axiom, TurtleAction, TurtleBuilder};
+    /// 
+    /// // Initialize an Axiom for demonstration purposes
+    /// let axiom = Axiom::with_elements([0, 1, 0, 1, 0, 1, 0, 1]);
+    /// 
+    /// // Create the turtle
+    /// use TurtleAction::*;
+    /// let turtle = TurtleBuilder::new()
+    ///     .assign_action(0, PushState)
+    ///     .assign_action_set(1, [Turn(PI * 0.5), Forward, PopState])
+    ///     .build();
+    /// 
+    /// // The drawing represents a '+' symbol
+    /// let drawing = axiom.visualize(turtle);
+    /// ```
     pub fn visualize(&self, turtle: Turtle<A>) -> Drawing {
         let mut state = VecDeque::new();
 
@@ -195,6 +329,42 @@ impl<A> Axiom<A> where A: Alphabet {
     }
 }
 
+/// A rule that dictates how symbols are rewritten in an L-System.
+/// 
+/// Each [Production] consists of two primary axioms
+/// - the matcher
+/// - the transcriber
+/// 
+/// When the matcher is found in a given [Axiom], it is replaced with the transcriber.
+/// Optionally, precursor and successor axioms can be given to a production.
+/// When present, the substitution will only succeed when the matcher is preceeded by the precursor and followed by the successor.
+/// 
+/// Additionally, a percentage (represented as a float) in the range `0f32..=1f32` can be supplied to a Production.
+/// This makes the rule stochastic: substitution is probabilistic.
+/// 
+/// Productions are most easily defined using the [production!] macro.
+/// 
+/// Productions cannot be applied to axioms on their own, they must be compiled into a [Ruleset] first.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use lindenmayer_grammar::{Axiom, Ruleset, production};
+/// 
+/// let mut axiom = Axiom::from(0);
+/// 
+/// // 80% of the time, 1 becomes 0 when bordered by zeros
+/// let p1 = production!(|0| 1 |0| => (0.8) 0);
+/// 
+/// // Unconditionally, 0 expands to 0, 1, 0
+/// let p2 = production!(0 => 0 : 1 : 0);
+/// 
+/// // Compile the two productions into a Ruleset
+/// let rules = Ruleset::from([p1, p2]);
+/// 
+/// // Apply the Ruleset twice
+/// axiom.rewrite(&rules).rewrite(&rules);
+/// ```
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Production<A: Alphabet> {
     matcher: Axiom<A>,
@@ -205,6 +375,7 @@ pub struct Production<A: Alphabet> {
 }
 
 impl<A> Production<A> where A: Alphabet {
+    /// Creates a new [Production], favor using the [production!] or [rules!] macros instead.
     pub fn new(
         matcher: Axiom<A>, 
         transcriber: Axiom<A>, 
@@ -279,6 +450,21 @@ impl<A> Debug for Production<A> where A: Alphabet + Debug {
     }
 }
 
+/// An ordered collection of [Production] rules.
+/// 
+/// Can be created from a single production, a collection of productions, or through the [rules!] macro.
+/// 
+/// Identity productions are implicit, and do not need to be added to the Ruleset.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use lindenmayer_grammar::{Ruleset, rules, production};
+/// 
+/// // The following Ruleset initializations are equivalent
+/// let rs = rules!(0 => 0 : 1, 1 => 0);
+/// let rs = Ruleset::from(vec![production!(0 => 0 : 1), production!(1 => 0)]);
+/// ```
 #[derive(Clone)]
 pub struct Ruleset<A>(BTreeSet<Production<A>>) where A: Alphabet;
 
@@ -436,22 +622,83 @@ macro_rules! production {
     };
 }
 
+/// Converts elements of an L-System [Alphabet] into sets of [TurtleAction] commands.
+/// 
+/// Must be supplied to [visualize](lindenmayer_grammar::Axiom::visualize) to create an Axiom's corresponding [Drawing].
+/// 
+/// Cannot be constructed directly; see [TurtleBuilder].
 #[derive(Clone)]
 pub struct Turtle<A>(BTreeMap<A, Vec<TurtleAction>>) where A: Alphabet;
 
+/// Describes an action that can be taken by a [Turtle].
+/// 
+/// These actions are mapped to the symbols of an [Alphabet] using [TurtleBuilder].
+/// 
+/// # Examples
+/// 
+/// ```
+/// use std::f32::consts::PI;
+/// 
+/// use lindenmayer_grammar::{TurtleBuilder, TurtleAction};
+/// 
+/// use TurtleAction::*;
+/// let turtle = TurtleBuilder::new()
+///     .assign_action(0, Forward)
+///     .assign_action(1, Turn(PI * 0.5))
+///     .assign_action(2, Turn(-PI * 0.5))
+///     .build();
+/// ```
 #[derive(Clone)]
 pub enum TurtleAction {
+    /// Advances the [Turtle] by one unit.
     Forward,
+
+    /// The [Turtle] retreats one unit. Does not affect it's heading.
     Backward,
+
+    /// Turn by the specified number of radians. 
+    /// Values less than 0 turn left. 
+    /// Values greater than 0 turn right.
     Turn(f32),
+
+    /// Save the heading and position of the turtle to a stack.
+    /// These values will be restored when the `PopState` command is encountered.
     PushState,
+
+    /// Pop the most recent heading and position values from the stack.
+    /// Moves the [Turtle] to the position *without* drawing a line.
     PopState,
+
+    /// The [Turtle] will no longer draw until `PenDown` is executed.
     PenUp,
+
+    /// Allows the [Turtle] to continue drawing.
     PenDown,
+
+    /// Updates the `StrokeStyle` of the [Turtle].
+    /// Expects a function that takes a reference to the old `StrokeStyle` as a parameter.
     SetStrokeStyle(fn(&StrokeStyle) -> StrokeStyle),
+
+    /// Updates the `SolidSource` of the [Turtle].
+    /// Expects a function that takes a reference to the old `SolidSource` as a parameter.
     SetSolidSource(fn(&SolidSource) -> SolidSource)
 }
 
+/// Allows the construction of a [Turtle] by assigning sets of [TurtleAction] commands to [Alphabet] symbols.
+/// 
+/// # Examples
+/// ```
+/// use std::f32::consts::PI;
+/// 
+/// use lindenmayer_grammar::{TurtleBuilder, TurtleAction};
+/// 
+/// use TurtleAction::*;
+/// let turtle = TurtleBuilder::new()
+///     .assign_action(0, Forward)
+///     .assign_action(1, Turn(PI * 0.5))
+///     .assign_action(2, Turn(-PI * 0.5))
+///     .build();
+/// ```
 #[derive(Clone)]
 pub struct TurtleBuilder<A>(BTreeMap<A, Vec<TurtleAction>>) where A: Alphabet;
 
@@ -462,25 +709,53 @@ impl<A> Default for TurtleBuilder<A> where A: Alphabet {
 }
 
 impl<A> TurtleBuilder<A> where A: Alphabet {
+    /// Initializes a new [TurtleBuilder].
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Consumes, the [TurtleBuilder], yielding a completed [Turtle].
     pub fn build(self) -> Turtle<A> {
         Turtle(self.0)
     }
 
+    /// Assign a single [TurtleAction] to a symbol.
     pub fn assign_action(mut self, symbol: A, action: TurtleAction) -> Self {
         self.0.insert(symbol, vec![action]);
         self
     }
 
+    // Assign an ordered collection of [TurtleAction] commands to a symbol.
     pub fn assign_action_set<I: IntoIterator<Item = TurtleAction>>(mut self, symbol: A, actions: I) -> Self {
         self.0.insert(symbol, actions.into_iter().collect::<Vec<_>>());
         self
     }
 }
 
+/// The visualization of an L-System.
+/// 
+/// Use the associated [save](#method:save) method to render the [Drawing] to a `.png` file.
+/// 
+/// Or, display to the screen using [show](#method:show).
+/// 
+/// # Example
+/// 
+/// ```
+/// use lindenmayer_grammar::{Axiom, TurtleAction, TurtleBuilder};
+/// 
+/// // Initialize an axiom for demonstration purposes
+/// let axiom = Axiom::with_elements([0, 1, 0, 1, 0, 1, 0, 1]);
+/// 
+/// // Create the turtle
+/// use TurtleAction::*;
+/// let turtle = TurtleBuilder::new()
+///     .assign_action(0, PushState)
+///     .assign_action_set(1, [Turn(PI * 0.5), Forward, PopState])
+///     .build();
+/// 
+/// // The drawing represents a '+' symbol
+/// let drawing = axiom.visualize(turtle);
+/// ```
 pub struct Drawing {
     width: i32,
     height: i32,
@@ -489,7 +764,7 @@ pub struct Drawing {
 }
 
 impl Drawing {
-    pub fn new(
+    fn new(
         width: i32, 
         height: i32, 
         origin: (f32, f32), 
@@ -573,7 +848,7 @@ impl Drawing {
                     let mut temp = PathBuilder::new();
                     temp.move_to(pos_x, pos_y);
 
-                    paths.push((temp, (style)(&paths.last().unwrap().1), paths.last().unwrap().2.clone()));
+                    paths.push((temp, (style)(&paths.last().unwrap().1), paths.last().unwrap().2));
                 },
                 SetSolidSource(solid_source) => {
                     let mut temp = PathBuilder::new();
@@ -633,6 +908,37 @@ impl Drawing {
         target
     }
 
+    /// Show the [Drawing] in a window.
+    /// 
+    /// The `raqote` crate is used to draw the L-System, and its `StrokeStyle` and `SolidSource` types are required to complete the visualization.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use raqote::{StrokeStyle, SolidSource};
+    /// 
+    /// use lindenmayer_grammar::{Axiom, TurtleAction, TurtleBuilder};
+    /// 
+    /// // Initialize an axiom for demonstration purposes
+    /// let axiom = Axiom::with_elements([0, 1, 0, 1, 0, 1, 0, 1]);
+    /// 
+    /// // Create the turtle
+    /// use TurtleAction::*;
+    /// let turtle = TurtleBuilder::new()
+    ///     .assign_action(0, PushState)
+    ///     .assign_action_set(1, [Turn(PI * 0.5), Forward, PopState])
+    ///     .build();
+    /// 
+    /// // The drawing represents a '+' symbol
+    /// let drawing = axiom.visualize(turtle);
+    /// 
+    /// // Display the drawing using white lines on a black background
+    /// drawing.show(
+    ///     [500, 500],
+    ///     StrokeStyle::default(), 
+    ///     SolidSource::from_unpremultiplied_argb(0xFF, 0xFF, 0xFF, 0xFF)
+    /// );
+    /// ```
     pub fn show(
         &self, 
         size: [u32; 2], 
@@ -662,6 +968,38 @@ impl Drawing {
         Ok(())
     }
 
+    /// Save the [Drawing] as a `.png` image.
+    /// 
+    /// The `raqote` crate is used to draw the L-System, and its `StrokeStyle` and `SolidSource` types are required to complete the visualization.
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use raqote::{StrokeStyle, SolidSource};
+    /// 
+    /// use lindenmayer_grammar::{Axiom, TurtleAction, TurtleBuilder};
+    /// 
+    /// // Initialize an axiom for demonstration purposes
+    /// let axiom = Axiom::with_elements([0, 1, 0, 1, 0, 1, 0, 1]);
+    /// 
+    /// // Create the turtle
+    /// use TurtleAction::*;
+    /// let turtle = TurtleBuilder::new()
+    ///     .assign_action(0, PushState)
+    ///     .assign_action_set(1, [Turn(PI * 0.5), Forward, PopState])
+    ///     .build();
+    /// 
+    /// // The drawing represents a '+' symbol
+    /// let drawing = axiom.visualize(turtle);
+    /// 
+    /// // Save the drawing to "plus.png"
+    /// drawing.save(
+    ///     [500, 500],
+    ///     StrokeStyle::default(), 
+    ///     SolidSource::from_unpremultiplied_argb(0xFF, 0xFF, 0xFF, 0xFF),
+    ///     "plus.png"
+    /// );
+    /// ```
     pub fn save(
         &self, 
         size: [u32; 2], 

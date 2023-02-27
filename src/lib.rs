@@ -254,6 +254,29 @@ impl<A> Axiom<A> where A: Alphabet {
         }
     }
 
+    pub fn rewrite_with_context(&self, rules: &Ruleset<A>) -> Axiom<A> {
+        let mut output = Vec::new();
+
+        let mut pointer = 0;
+
+        'token: while pointer < self.len() {
+            for rule in rules.0.iter() {
+                if rule.new_matcher(self.0.as_slice(), pointer) {
+                    output.append(&mut rule.transcriber.0.clone());
+                    pointer += rule.matcher.len();
+
+                    continue 'token;
+                }
+            }
+
+            output.push(self.0[pointer].clone());
+
+            pointer += 1;
+        }
+
+        Axiom::with_elements(output)
+    }
+
     pub fn visualize(&self, turtle: Turtle<A>) -> Drawing {
         let mut state = VecDeque::new();
 
@@ -368,6 +391,29 @@ impl<A> Production<A> where A: Alphabet {
 
     fn matcher(&self, slice: &[A]) -> Option<usize> {
         (1..=slice.len()).find(|&i| self.matcher.0 == slice[0..i])
+    }
+
+    fn new_matcher(&self, tokens: &[A], index: usize) -> bool {
+        if thread_rng().gen::<f32>() > self.probability.0 { return false; }
+
+        if !tokens[index..].starts_with(self.matcher.0.as_slice()) { return false; }
+
+        if let Some(precursor) = &self.precursor {
+            let start = index.overflowing_sub(precursor.len());
+            if start.1 { return false; }
+
+            if &tokens[start.0..precursor.len()] != (precursor.0.as_slice()) { return false; }
+        }
+
+        if let Some(successor) = &self.successor {
+            if successor.len() + self.matcher.len() + index > tokens.len() { return false; }
+
+            let start = index + self.matcher.len();
+            let end = start + successor.len();
+            if &tokens[start..end] != successor.0.as_slice() { return false; }
+        }
+
+        true
     }
 }
 

@@ -401,7 +401,7 @@ impl<A> Production<A> where A: Alphabet {
             let start = index.overflowing_sub(precursor.len());
             if start.1 { return false; }
 
-            if &tokens[start.0..precursor.len()] != (precursor.0.as_slice()) { return false; }
+            if &tokens[start.0..(start.0 + precursor.len())] != (precursor.0.as_slice()) { return false; }
         }
 
         if let Some(successor) = &self.successor {
@@ -492,129 +492,188 @@ impl<A> Debug for Ruleset<A> where A: Alphabet + Debug {
     }
 }
 
+/// Builds a [Ruleset] from a comma-separated list of [Production] statements.
+/// 
+/// Matcher and transcriber axioms are separated by a `=>` symbol.
+/// Elements of the matcher and transcribers should be separated with a colon.
+/// 
+/// This macro supports stochastic productions, but context sensitive rules must be constructed using the [production!] macro.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use lindenmayer_grammar::rules;
+///
+/// // The second rule only occurs 50% of the time
+/// // The first is unconditional
+/// rules!(
+///     0 => 0 : 1, 
+///     1 => (0.5) 0
+/// );
+/// ```
 #[macro_export]
 macro_rules! rules {
-    ($($(| $f:literal $(: $g:literal)* |)? $a:literal $(: $b:literal)* $(| $x:literal $(: $z:literal)* |)? $([$p:literal])? => $c:literal $(: $d:literal)*),+) => {
+    ($($a:literal $(: $b:literal)* => $(($p:literal))? $c:literal $(: $d:literal)*),+) => {
         {
             use std::collections::BTreeSet;
 
             use lindenmayer_grammar::{production, Ruleset};
 
             let mut ruleset = BTreeSet::new();
-            $(ruleset.insert(production!($(| $f $(: $g)* |)? $a $(: $b)* $(| $x $(: $z)* |)? $([$p])? => $c $(: $d)*));)+
+            $(ruleset.insert(production!($a $(: $b)* => $(($p))? $c $(: $d)*));)+
             
             Ruleset::from(ruleset)
         }
     };
-    ($($(| $f:path $(: $g:path)* |)? $a:path $(: $b:path)* $(| $x:path $(: $z:path)* |)? $([$p:literal])? => $c:path $(: $d:path)*),+) => {
+    ($($a:path $(: $b:path)* => $(($p:literal))? $c:path $(: $d:path)*),+) => {
         {
             use std::collections::BTreeSet;
 
             use lindenmayer_grammar::{production, Ruleset};
 
             let mut ruleset = BTreeSet::new();
-            $(ruleset.insert(production!($(| $f $(: $g)* |)? $a $(: $b)* $(| $x $(: $z)* |)? $([$p])? => $c $(: $d)*));)+
+            $(ruleset.insert(production!($a $(: $b)* => $(($p))? $c $(: $d)*));)+
             
             Ruleset::from(ruleset)
         }
     };
 }
 
+/// A wrapper to create a single [Production].
+/// 
+/// Matcher and transcriber axioms should be separated by a `=>` symbol.
+/// Elements of the matcher and transcriber should be separated with a colon.
+/// 
+/// This macro can represent context-sensitive rules.
+/// An optional precursor axiom comes before matcher, while a successor can come afterwards.
+/// These statements are separated with `|`.
+/// # Examples
+/// 
+/// ```
+/// use lindenmayer_grammar::{Axiom, Production, production};
+/// 
+/// // 0 becomes 0, 1 unconditionally
+/// production!(0 => 0 : 1);
+/// 
+/// // 50% of the time, 1 becomes 0, but only when bounded by zeros
+/// production!(0 | 1 | 0 => (0.5) 0);
+/// 
+/// // This rule could also be expressed as...
+/// Production::new(Axiom::new(1), Axiom::new(0), Some(Axiom::new(0)), Some(Axiom::new(0)), 0.5);
+/// ```
 #[macro_export]
 macro_rules! production {
-    ($(| $f:literal $(: $g:literal)* |)? $a:literal $(: $b:literal)* $(| $x:literal $(: $z:literal)* |)? $([$p:literal])? => $c:literal $(: $d:literal)*) => {
+    ($a:literal $(: $b:literal)* $(| $x:literal $(: $z:literal)*)? => $(($p:literal))? $c:literal $(: $d:literal)*) => {
         {
             use lindenmayer_grammar::{Axiom, Production};
 
             let mut matcher = vec![$a];
-
-            $(
-                matcher.push($b);
-            )*
-
             let mut transcriber = vec![$c];
-
-            $(
-                transcriber.push($d);
-            )*
-
+            let mut successor = Vec::new();
             let mut probability = 1.0;
 
-            $(
-                probability = $p;
-            )?
-
-            let mut precursor = Vec::new();
-            $(
-                precursor.push($f);
-
-                $(
-                    precursor.push($g);
-                )*
-            )?
-
-            let mut successor = Vec::new();
+            $(matcher.push($b);)*
+            $(transcriber.push($d);)*
+            $(probability = $p;)?
+            
             $(
                 successor.push($x);
-
-                $(
-                    successor.push($z);
-                )*
+                $(successor.push($z);)*
             )?
 
             Production::new(
                 Axiom::with_elements(matcher), 
                 Axiom::with_elements(transcriber), 
-                if precursor.is_empty() { None } else { Some(Axiom::with_elements(precursor)) },
+                None,
                 if successor.is_empty() { None } else { Some(Axiom::with_elements(successor)) },
                 probability
             )
         }
     };
-    ($(| $f:path $(: $g:path)* |)? $a:path $(: $b:path)* $(| $x:path $(: $z:path)* |)? $([$p:literal])? => $c:path $(: $d:path)*) => {
+    ($f:literal $(: $g:literal)* | $a:literal $(: $b:literal)* $(| $x:literal $(: $z:literal)*)? => $(($p:literal))? $c:literal $(: $d:literal)*) => {
         {
             use lindenmayer_grammar::{Axiom, Production};
 
             let mut matcher = vec![$a];
-
-            $(
-                matcher.push($b);
-            )*
-
             let mut transcriber = vec![$c];
-
-            $(
-                transcriber.push($d);
-            )*
-
+            let mut precursor = Vec::new();
+            let mut successor = Vec::new();
             let mut probability = 1.0;
 
-            $(
-                probability = $p;
-            )?
-
-            let mut precursor = Vec::new();
+            $(matcher.push($b);)*
+            $(transcriber.push($d);)*
+            $(probability = $p;)?
+            
             $(
                 precursor.push($f);
-
-                $(
-                    precursor.push($g);
-                )*
+                $(precursor.push($g);)*
             )?
 
-            let mut successor = Vec::new();
             $(
                 successor.push($x);
-
-                $(
-                    successor.push($z);
-                )*
+                $(successor.push($z);)*
             )?
 
             Production::new(
                 Axiom::with_elements(matcher), 
                 Axiom::with_elements(transcriber), 
-                if precursor.is_empty() { None } else { Some(Axiom::with_elements(precursor)) },
+                Some(Axiom::with_elements(precursor)),
+                if successor.is_empty() { None } else { Some(Axiom::with_elements(successor)) },
+                probability
+            )
+        }
+    };
+    ($a:path $(: $b:path)* $(| $x:path $(: $z:path)*)? => $(($p:literal))? $c:path $(: $d:path)*) => {
+        {
+            use lindenmayer_grammar::{Axiom, Production};
+
+            let mut matcher = vec![$a];
+            let mut transcriber = vec![$c];
+            let mut successor = Vec::new();
+            let mut probability = 1.0;
+
+            $(matcher.push($b);)*
+            $(transcriber.push($d);)*
+            $(probability = $p;)?
+            
+            $(
+                successor.push($x);
+                $(successor.push($z);)*
+            )?
+
+            Production::new(
+                Axiom::with_elements(matcher), 
+                Axiom::with_elements(transcriber), 
+                None,
+                if successor.is_empty() { None } else { Some(Axiom::with_elements(successor)) },
+                probability
+            )
+        }
+    };
+    ($f:path $(: $g:path)* | $a:path $(: $b:path)* $(| $x:path $(: $z:path)*)? => $(($p:literal))? $c:path $(: $d:path)*) => {
+        {
+            use lindenmayer_grammar::{Axiom, Production};
+
+            let mut matcher = vec![$a];
+            let mut transcriber = vec![$c];
+            let mut precursor = vec![$f];
+            let mut successor = Vec::new();
+            let mut probability = 1.0;
+
+            $(matcher.push($b);)*
+            $(transcriber.push($d);)*
+            $(probability = $p;)?
+            $(precursor.push($g);)*
+
+            $(
+                successor.push($x);
+                $(successor.push($z);)*
+            )?
+
+            Production::new(
+                Axiom::with_elements(matcher), 
+                Axiom::with_elements(transcriber), 
+                Some(Axiom::with_elements(precursor)),
                 if successor.is_empty() { None } else { Some(Axiom::with_elements(successor)) },
                 probability
             )

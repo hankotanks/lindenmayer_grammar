@@ -32,7 +32,7 @@ fn main() -> anyhow::Result<()> {
     let mut axiom = Axiom::new(A);
 
     let rules = rules!(
-        B [0.6] => B : B,
+        B => (0.6) B : B,
         A => B : Left : Open : Open : A : Close : Right : A : Close 
                : Right : B : Open : Right : B : A : Close : Left : A
     );

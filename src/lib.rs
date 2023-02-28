@@ -96,7 +96,6 @@ pub trait Alphabet: Clone + Ord {  }
 
 impl<T> Alphabet for T where T: Clone + Ord {  }
 
-
 /// A sentence of symbols from a single [Alphabet].
 /// 
 /// An axiom can be initialized from a single symbol or a collection of symbols.
@@ -392,6 +391,8 @@ impl<A> Production<A> where A: Alphabet {
         }
     }
 
+    // Returns true if a match is found at `index`
+    // Takes precursor and successor Axioms into account
     fn matcher(&self, tokens: &[A], index: usize) -> bool {
         if thread_rng().gen::<f32>() > self.probability.0 { return false; }
 
@@ -546,7 +547,8 @@ macro_rules! rules {
 /// 
 /// This macro can represent context-sensitive rules.
 /// An optional precursor axiom comes before matcher, while a successor can come afterwards.
-/// These statements are separated with `|`.
+/// 
+/// `precursor | matcher > successor => (probability) transcriber`
 /// # Examples
 /// 
 /// ```
@@ -556,14 +558,14 @@ macro_rules! rules {
 /// production!(0 => 0 : 1);
 /// 
 /// // 50% of the time, 1 becomes 0, but only when bounded by zeros
-/// production!(0 | 1 | 0 => (0.5) 0);
+/// production!(0 | 1 > 0 => (0.5) 0);
 /// 
 /// // This rule could also be expressed as...
 /// Production::new(Axiom::new(1), Axiom::new(0), Some(Axiom::new(0)), Some(Axiom::new(0)), 0.5);
 /// ```
 #[macro_export]
 macro_rules! production {
-    ($a:literal $(: $b:literal)* $(| $x:literal $(: $z:literal)*)? => $(($p:literal))? $c:literal $(: $d:literal)*) => {
+    ($a:literal $(: $b:literal)* $(> $x:literal $(: $z:literal)*)? => $(($p:literal))? $c:literal $(: $d:literal)*) => {
         {
             use lindenmayer_grammar::{Axiom, Production};
 
@@ -590,7 +592,7 @@ macro_rules! production {
             )
         }
     };
-    ($f:literal $(: $g:literal)* | $a:literal $(: $b:literal)* $(| $x:literal $(: $z:literal)*)? => $(($p:literal))? $c:literal $(: $d:literal)*) => {
+    ($f:literal $(: $g:literal)* | $a:literal $(: $b:literal)* $(> $x:literal $(: $z:literal)*)? => $(($p:literal))? $c:literal $(: $d:literal)*) => {
         {
             use lindenmayer_grammar::{Axiom, Production};
 
@@ -623,7 +625,7 @@ macro_rules! production {
             )
         }
     };
-    ($a:path $(: $b:path)* $(| $x:path $(: $z:path)*)? => $(($p:literal))? $c:path $(: $d:path)*) => {
+    ($a:path $(: $b:path)* $(> $x:path $(: $z:path)*)? => $(($p:literal))? $c:path $(: $d:path)*) => {
         {
             use lindenmayer_grammar::{Axiom, Production};
 
@@ -650,7 +652,7 @@ macro_rules! production {
             )
         }
     };
-    ($f:path $(: $g:path)* | $a:path $(: $b:path)* $(| $x:path $(: $z:path)*)? => $(($p:literal))? $c:path $(: $d:path)*) => {
+    ($f:path $(: $g:path)* | $a:path $(: $b:path)* $(> $x:path $(: $z:path)*)? => $(($p:literal))? $c:path $(: $d:path)*) => {
         {
             use lindenmayer_grammar::{Axiom, Production};
 
@@ -675,6 +677,67 @@ macro_rules! production {
                 Axiom::with_elements(transcriber), 
                 Some(Axiom::with_elements(precursor)),
                 if successor.is_empty() { None } else { Some(Axiom::with_elements(successor)) },
+                probability
+            )
+        }
+    };
+}
+
+/// Constructs a [Production] rule from a series of string literals.
+/// 
+/// Obeys the same grammar rules as the [production!] macro. 
+/// However, instead of colon-delineated symbols, the corresponding strings are broken down into `char` arrays.
+/// 
+/// Unlike the [production!] macro; however, this macro always returns a value of type `Production<char>`.
+/// 
+/// # Examples
+/// 
+/// ```
+/// use lindenmayer_grammar::{Ruleset, production_str};
+/// 
+/// // The production_str! macro makes the respresentation of complex L-Systems easy
+/// let rules: Ruleset<char> = Ruleset::from([
+///     production_str!("F" => "F[-EF[&&&A]]E[+F[```A]]"),
+///     production_str!("F" | "E" => "F[&F[+++A]][`F[---A]]"),
+///     production_str!("A" => "{[++++G.][++GG.][GGGGG.][-GGG.][--G.][----G.]}")
+/// ]);
+/// ```
+#[macro_export]
+macro_rules! production_str {
+    ($m:literal $(> $s:literal)? => $(($c:literal))? $t:literal) => {
+        {
+            use lindenmayer_grammar::{Axiom, Production};
+
+            let mut successor = None;
+            $(successor = Some(Axiom::with_elements($s.chars));)?
+
+            let mut probability = 1.0;
+            $(probability = $c;)?
+
+            Production::new(
+                Axiom::with_elements($m.chars()),
+                Axiom::with_elements($t.chars()),
+                None,
+                successor,
+                probability
+            )
+        }
+    };
+    ($p:literal | $m:literal $(> $s:literal)? => $(($c:literal))? $t:literal) => {
+        {
+            use lindenmayer_grammar::{Axiom, Production};
+
+            let mut successor = None;
+            $(successor = Some(Axiom::with_elements($s.chars));)?
+
+            let mut probability = 1.0;
+            $(probability = $c;)?
+
+            Production::new(
+                Axiom::with_elements($m.chars()),
+                Axiom::with_elements($t.chars()),
+                Some(Axiom::with_elements($p.chars())),
+                successor,
                 probability
             )
         }
@@ -913,7 +976,11 @@ impl Drawing {
                     let mut temp = PathBuilder::new();
                     temp.move_to(pos_x, pos_y);
 
-                    paths.push((temp, paths.last().unwrap().1.clone(), (solid_source)(&paths.last().unwrap().2)));
+                    paths.push((
+                        temp, 
+                        paths.last().unwrap().1.clone(), 
+                        (solid_source)(&paths.last().unwrap().2)
+                    ));
                 }
             }
         }

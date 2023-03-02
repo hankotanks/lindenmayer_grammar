@@ -320,8 +320,8 @@ impl<A> Axiom<A> where A: Alphabet {
         }
 
         Drawing::new(
-            (maxima.0 - minima.0) as i32, 
-            (maxima.1 - minima.1) as i32, 
+            (maxima.0 - minima.0).abs() as i32, 
+            (maxima.1 - minima.1).abs() as i32, 
             (minima.0.abs(), minima.1.abs()), 
             actions
         )
@@ -995,22 +995,17 @@ impl Drawing {
         size: [u32; 2], 
         initial_stroke_style: StrokeStyle, 
         initial_solid_source: SolidSource
-    ) -> DrawTarget {
-        let pen = initial_stroke_style.width.ceil();
+    ) -> DrawTarget {        
+        let mut target = DrawTarget::new(size[0] as i32, size[1] as i32);
 
-        let target_width = size[0] as i32 + pen as i32;
-        let target_height = size[1] as i32 + pen as i32;
-        
-        let mut target = DrawTarget::new(target_width, target_height);
-
-        let resolution = if self.width > self.height {
+        let resolution = if self.width < self.height {
             size[0] as f32 / (self.width + 2) as f32
         } else {
             size[1] as f32 / (self.height + 2) as f32
         };
 
-        let offset_x = (size[0] as f32 - resolution * (self.width + 2) as f32) / 2.0 + pen;
-        let offset_y = (size[1] as f32 - resolution * (self.height + 2) as f32) / 2.0 + pen;
+        let offset_x = (size[0] as f32 - resolution * (self.width + 2) as f32) / 2.0;
+        let offset_y = (size[1] as f32 - resolution * (self.height + 2) as f32) / 2.0;
 
         target.clear(SolidSource::from_unpremultiplied_argb(0xFF, 0, 0, 0));
 
@@ -1067,11 +1062,30 @@ impl Drawing {
     /// ```
     pub fn show(
         &self, 
-        size: [u32; 2], 
+        size: [u32; 2],
         initial_stroke_style: StrokeStyle, 
         initial_solid_source: SolidSource
     ) -> anyhow::Result<()> {
-        let draw_target = self.build_draw_target(size, initial_stroke_style, initial_solid_source);
+        self.show_scaled(size, 1.0, initial_stroke_style, initial_solid_source)
+    }
+
+    /// A variant of [show](#method:show) that accepts an additional `resolution` behavior.
+    /// 
+    /// `size` determines the dimensions of the resulting window, while `resolution` is a scalar that affects the dimensions of the image therein.
+    pub fn show_scaled(
+        &self, 
+        size: [u32; 2], 
+        resolution: f32,
+        initial_stroke_style: StrokeStyle, 
+        initial_solid_source: SolidSource
+    ) -> anyhow::Result<()> {
+        let image_size = if resolution == 1.0 {
+            size
+        } else {
+            [(size[0] as f32 * resolution) as u32, (size[1] as f32 * resolution) as u32]
+        };
+
+        let draw_target = self.build_draw_target(image_size, initial_stroke_style, initial_solid_source);
 
         let image: Image = draw_target.into();
 

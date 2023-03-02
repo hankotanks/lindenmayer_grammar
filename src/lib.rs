@@ -995,14 +995,13 @@ impl Drawing {
         size: [u32; 2], 
         initial_stroke_style: StrokeStyle, 
         initial_solid_source: SolidSource
-    ) -> DrawTarget {        
+    ) -> DrawTarget {
         let mut target = DrawTarget::new(size[0] as i32, size[1] as i32);
 
-        let resolution = if self.width < self.height {
-            size[0] as f32 / (self.width + 2) as f32
-        } else {
-            size[1] as f32 / (self.height + 2) as f32
-        };
+        let res_x = size[0] as f32 / (self.width) as f32;
+        let res_y = size[1] as f32 / (self.height) as f32;
+
+        let resolution = res_x.min(res_y);
 
         let offset_x = (size[0] as f32 - resolution * (self.width + 2) as f32) / 2.0;
         let offset_y = (size[1] as f32 - resolution * (self.height + 2) as f32) / 2.0;
